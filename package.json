@@ -1,0 +1,19 @@
+{
+  "name": "clinic-ai-copilot",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "yarn@4.17.0",
+  "workspaces": [
+    "apps/*",
+    "services/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "format": "prettier . --write",
+    "format:check": "prettier . --check",
+    "lint": "echo \"Linting will be enabled after application packages are generated.\""
+  },
+  "devDependencies": {
+    "prettier": "^3.6.2"
+  }
+}
