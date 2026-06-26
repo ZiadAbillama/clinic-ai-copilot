@@ -9,11 +9,16 @@
     "packages/*"
   ],
   "scripts": {
+    "web:dev": "yarn workspace @clinic-ai/web dev",
+    "web:build": "yarn workspace @clinic-ai/web build",
+    "web:start": "yarn workspace @clinic-ai/web start",
+    "web:lint": "yarn workspace @clinic-ai/web lint",
     "format": "prettier . --write",
     "format:check": "prettier . --check",
     "lint": "echo \"Linting will be enabled after application packages are generated.\""
   },
   "devDependencies": {
-    "prettier": "^3.6.2"
+    "prettier": "^3.6.2",
+    "typescript": "^6.0.3"
   }
 }

@@ -4,13 +4,14 @@ Clinic AI Copilot is a staged training project for building an AI-enabled medica
 
 ## Project Status
 
-Current stage: Stage 2 - repository structure and project conventions.
+Current stage: Stage 3 - frontend design slice.
 
 Completed:
 
 - Stage 0 domain summary
 - Stage 1 development environment check
 - Initial monorepo skeleton
+- First Next.js dashboard design
 
 ## Architecture Overview
 
@@ -62,7 +63,7 @@ docs/                        Project planning, stage notes, and architecture doc
 
 ## Local Setup
 
-The implementation packages will be added in later stages. For now, verify the base tools:
+Verify the base tools:
 
 ```powershell
 node -v
@@ -70,6 +71,24 @@ yarn -v
 git --version
 docker --version
 docker compose version
+```
+
+Install dependencies:
+
+```powershell
+yarn install
+```
+
+Run the frontend:
+
+```powershell
+yarn web:dev
+```
+
+Then open:
+
+```text
+http://localhost:3000
 ```
 
 ## Environment Variables
@@ -91,9 +110,11 @@ Never commit real secrets.
 
 - [Domain summary](docs/Domain_Summary.md)
 - [Stage 1 environment check](docs/STAGE_1_ENVIRONMENT_CHECK.md)
+- [Stage 2 repository structure](docs/STAGE_2_REPOSITORY_STRUCTURE.md)
 
 ## Known Limitations
 
-- Application packages have not been generated yet.
+- The frontend currently uses mock data only.
+- The backend health API has not been created yet.
 - Docker Compose services have not been defined yet.
 - Databases and AI workflows will be introduced in later stages.
