@@ -1,6 +1,6 @@
-// Mock data for the single-doctor workspace. Replace with a real database later.
+// Starter data for shared development. Seed this into MongoDB; the API reads from the database.
 
-export const patients = [
+export const seedPatients = [
   {
     id: 'P-1024',
     name: 'Maya Haddad',

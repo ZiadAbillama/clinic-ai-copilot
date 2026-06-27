@@ -94,6 +94,13 @@ Copy `.env.example` to `.env` when local services are introduced.
 
 Never commit real secrets.
 
+The API reads `MONGO_URL` from `.env` and connects to MongoDB Atlas with Mongoose.
+After configuring `MONGO_URL`, seed shared development patients with:
+
+```bash
+yarn api:seed
+```
+
 ## Development Conventions
 
 - Use JavaScript only; do not add TypeScript.

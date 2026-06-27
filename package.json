@@ -15,6 +15,7 @@
     "web:lint": "yarn workspace @clinic-ai/web lint",
     "api:dev": "yarn workspace @clinic-ai/api dev",
     "api:start": "yarn workspace @clinic-ai/api start",
+    "api:seed": "yarn workspace @clinic-ai/api seed",
     "api:lint": "yarn workspace @clinic-ai/api lint",
     "dev": "yarn web:dev",
     "format": "prettier . --write",

@@ -19,7 +19,7 @@ approves or rejects → everything appears on the patient timeline.
 | Language | JavaScript only (no TypeScript)                                      | ✅     |
 | Frontend | React with Vite                                                      | ✅     |
 | Backend  | Node.js with Express (single API service)                            | ✅     |
-| Database | MongoDB only, via Mongoose (no PostgreSQL)                           | ⬜     |
+| Database | MongoDB only, via Mongoose (no PostgreSQL)                           | 🟡     |
 | AI       | Local Ollama server, model `llama3.1:8b` at `http://localhost:11434` | ⬜     |
 | Auth     | Multiple doctors, isolated data, real JWT                            | ⬜     |
 | Search   | MongoDB text search (semantic later)                                 | ⬜     |
@@ -54,6 +54,8 @@ approves or rejects → everything appears on the patient timeline.
 - **Patient management (🟡):** read-only mock list/get endpoints exist and the
   dashboard consumes the list and detail endpoints; create/edit and persistence are
   not built.
+- **Database (🟡):** Mongoose connection and Patient model exist; the API reads
+  patients from MongoDB Atlas. Other models are not built yet.
 - **Visit statuses:** `Scheduled` → `In progress` → `Completed` → `Cancelled`.
   "Start now" creates the visit directly as `In progress`; "Schedule" creates it as
   `Scheduled`.
@@ -81,8 +83,8 @@ the doctor) and sort newest-first; show each note's AI summary inline.
 Current (✅):
 
 - `GET /api/health` — service status
-- `GET /api/patients` — list (mock data)
-- `GET /api/patients/:id` — single (mock data)
+- `GET /api/patients` — list from MongoDB Atlas
+- `GET /api/patients/:id` — single from MongoDB Atlas
 
 Planned (⬜, all JWT-protected and doctor-scoped):
 
@@ -103,7 +105,7 @@ Planned (⬜, all JWT-protected and doctor-scoped):
 | 1     | Environment check                           | ✅     |
 | 2     | Repository structure (monorepo, JS-only)    | ✅     |
 | 3     | Frontend design slice + health/patients API | ✅     |
-| 4     | MongoDB + Mongoose models                   | ⬜     |
+| 4     | MongoDB + Mongoose models                   | 🟡     |
 | 5     | Auth (JWT, multi-doctor, data isolation)    | ⬜     |
 | 6     | Patients + visits + notes CRUD              | ⬜     |
 | 7     | Patient timeline                            | ⬜     |
@@ -113,6 +115,6 @@ Planned (⬜, all JWT-protected and doctor-scoped):
 
 ## 8. Known Limitations (current)
 
-- Frontend and API use mock data; no database yet.
+- Patient data uses MongoDB Atlas, seeded from starter data.
 - No auth; the API is unscoped and public.
-- No appointments, notes, timeline, AI, search, or audit log yet.
+- No appointments, notes, timeline, AI, search, or audit log persistence yet.
