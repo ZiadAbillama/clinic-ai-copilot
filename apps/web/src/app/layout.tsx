@@ -3,7 +3,8 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: 'Clinic AI Copilot',
-  description: 'Clinic operations dashboard with human-reviewed AI workflows.',
+  description:
+    'Staff dashboard for patients, appointments, notes, and human-reviewed AI summaries.',
 };
 
 export default function RootLayout({

@@ -6,17 +6,16 @@ Create the first real frontend design for Clinic AI Copilot before wiring backen
 
 ## Current Design Direction
 
-The frontend is an operations-focused clinic dashboard, not a marketing landing page. It prioritizes fast scanning, patient flow, AI review status, and audit visibility.
+The frontend is now a simple staff dashboard inspired by the CliniKit visual theme without copying the public website structure. It keeps the dark navy, cyan accent, compact brand mark, and clinical-tech atmosphere, but the content focuses on the guide's first working slice: patients, appointments, notes, system status, and human-reviewed AI.
 
 ## Implemented Screens
 
-- Care team command center dashboard
-- Left navigation for main clinic modules
-- Metrics for appointments, check-ins, AI drafts, and safety reviews
-- Patient queue with status and acuity
-- AI review queue with draft/context/audit items
-- Human-reviewed AI summary flow
-- Live audit timeline
+- Staff workspace header
+- System status panel for web app, health API, and mock data
+- Patient list using mock data
+- Medical note flow card
+- Human-reviewed AI queue
+- Project module cards for patient, appointment, notes, and AI services
 
 ## Mock Data
 
@@ -52,11 +51,10 @@ Passed:
 
 ## Next Decisions
 
-Before connecting the backend, review whether the dashboard should keep this layout or change any of:
+Before connecting the backend, review whether the frontend should keep this layout or change any of:
 
-- Navigation modules
-- Dashboard metrics
-- Patient queue columns
-- AI review panel content
+- Patient list fields
+- System status wording
+- Notes and AI review cards
 - Color/style direction
 - Mobile layout behavior
