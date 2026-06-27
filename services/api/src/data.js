@@ -22,4 +22,11 @@ export const patients = [
     appointment: '09:25',
     status: 'Doctor review',
   },
+  {
+    id: 'P-1027',
+    name: 'Ziad Abillama',
+    reason: 'Internship Assistance',
+    appointment: '10:30',
+    status: 'Checked in',
+  },
 ];

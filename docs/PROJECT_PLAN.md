@@ -49,10 +49,10 @@ approves or rejects → everything appears on the patient timeline.
 
 ### Feature detail notes
 
-- **Dashboard (🟡):** UI shell + live `/api/health` status done; patient list still
-  uses frontend mock data, not the API.
-- **Patient management (🟡):** read-only mock list/get endpoints exist; create/edit
-  and persistence not built.
+- **Dashboard (🟡):** UI shell + live `/api/health` status done; patient list now
+  loads through `/api/patients`.
+- **Patient management (🟡):** read-only mock list/get endpoints exist and the
+  dashboard consumes the list endpoint; create/edit and persistence are not built.
 - **Visit statuses:** `Scheduled` → `In progress` → `Completed` → `Cancelled`.
   "Start now" creates the visit directly as `In progress`; "Schedule" creates it as
   `Scheduled`.
@@ -115,4 +115,3 @@ Planned (⬜, all JWT-protected and doctor-scoped):
 - Frontend and API use mock data; no database yet.
 - No auth; the API is unscoped and public.
 - No appointments, notes, timeline, AI, search, or audit log yet.
-- Frontend patient list is not wired to `/api/patients`.

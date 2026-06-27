@@ -10,37 +10,17 @@ import {
   Stethoscope,
 } from 'lucide-react';
 
-const patients = [
-  {
-    id: 'P-1024',
-    name: 'Maya Haddad',
-    reason: 'Follow-up consultation',
-    appointment: '08:40',
-    status: 'Checked in',
-  },
-  {
-    id: 'P-1025',
-    name: 'Karim Nassar',
-    reason: 'New patient intake',
-    appointment: '09:05',
-    status: 'Needs vitals',
-  },
-  {
-    id: 'P-1026',
-    name: 'Omar Saad',
-    reason: 'Chest discomfort note',
-    appointment: '09:25',
-    status: 'Doctor review',
-  },
-];
-
 const aiQueue = ['Summarize visit note', 'Search prior notes', 'Mark output for review'];
 
 export default function App() {
   const [apiState, setApiState] = useState('Checking');
+  const [patients, setPatients] = useState([]);
+  const [patientsState, setPatientsState] = useState('Loading');
+  const [patientsError, setPatientsError] = useState('');
 
   useEffect(() => {
     let active = true;
+
     fetch('/api/health')
       .then((res) => (res.ok ? res.json() : Promise.reject(res)))
       .then((data) => {
@@ -54,6 +34,29 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+
+    fetch('/api/patients')
+      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
+      .then((data) => {
+        if (!active) return;
+        setPatients(data);
+        setPatientsState('Loaded');
+        setPatientsError('');
+      })
+      .catch(() => {
+        if (!active) return;
+        setPatients([]);
+        setPatientsState('Offline');
+        setPatientsError('Patient data is unavailable. Start the API and refresh.');
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const healthChecks = [
     { label: 'Web app', state: 'Ready', icon: CheckCircle2 },
     {
@@ -61,7 +64,11 @@ export default function App() {
       state: apiState,
       icon: apiState === 'Ready' ? CheckCircle2 : CircleDashed,
     },
-    { label: 'Mock data', state: 'Loaded', icon: CheckCircle2 },
+    {
+      label: 'Patients API',
+      state: patientsState,
+      icon: patientsState === 'Loaded' ? CheckCircle2 : CircleDashed,
+    },
   ];
 
   return (
@@ -115,10 +122,18 @@ export default function App() {
               <p className="eyebrow">Patients</p>
               <h2>Today</h2>
             </div>
-            <span>3 active</span>
+            <span>{patientsState === 'Loaded' ? `${patients.length} active` : patientsState}</span>
           </div>
 
           <div className="patientList">
+            {patientsState === 'Loading' && <p className="patientMessage">Loading patients...</p>}
+
+            {patientsError && <p className="patientMessage error">{patientsError}</p>}
+
+            {patientsState === 'Loaded' && patients.length === 0 && (
+              <p className="patientMessage">No patients scheduled for today.</p>
+            )}
+
             {patients.map((patient) => (
               <article className="patientRow" key={patient.id}>
                 <time>{patient.appointment}</time>

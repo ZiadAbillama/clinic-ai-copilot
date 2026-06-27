@@ -281,6 +281,19 @@ h3 {
   display: grid;
 }
 
+.patientMessage {
+  margin: 0;
+  padding: 22px 24px;
+  color: var(--muted);
+  font-weight: 700;
+  border-bottom: 1px solid var(--line);
+}
+
+.patientMessage.error {
+  color: #9f1239;
+  background: #fff1f2;
+}
+
 .patientRow {
   display: grid;
   grid-template-columns: 84px minmax(0, 1fr) auto;
