@@ -107,10 +107,7 @@ Never commit real secrets.
 
 ## Current Documentation
 
-- [Domain summary](docs/Domain_Summary.md)
-- [Stage 1 environment check](docs/STAGE_1_ENVIRONMENT_CHECK.md)
-- [Stage 2 repository structure](docs/STAGE_2_REPOSITORY_STRUCTURE.md)
-- [Stage 3 frontend design](docs/STAGE_3_FRONTEND_DESIGN.md)
+- [Project plan](docs/PROJECT_PLAN.md)
 
 ## Known Limitations
 
