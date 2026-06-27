@@ -37,8 +37,8 @@ export const patients = [
   {
     id: 'P-1027',
     name: 'Ziad Abillama',
-    dob: '2006-05-14',
-    contact: '+961 03 000 000',
+    dob: '2006-01-13',
+    contact: '+961 71 665 965',
     reason: 'Internship Assistance',
     appointment: '10:30',
     status: 'Checked in',
