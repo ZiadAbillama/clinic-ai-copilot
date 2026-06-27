@@ -52,7 +52,8 @@ approves or rejects → everything appears on the patient timeline.
 - **Dashboard (🟡):** UI shell + live `/api/health` status done; patient list now
   loads through `/api/patients`.
 - **Patient management (🟡):** read-only mock list/get endpoints exist and the
-  dashboard consumes the list endpoint; create/edit and persistence are not built.
+  dashboard consumes the list and detail endpoints; create/edit and persistence are
+  not built.
 - **Visit statuses:** `Scheduled` → `In progress` → `Completed` → `Cancelled`.
   "Start now" creates the visit directly as `In progress`; "Schedule" creates it as
   `Scheduled`.

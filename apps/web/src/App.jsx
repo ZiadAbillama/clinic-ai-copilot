@@ -17,6 +17,10 @@ export default function App() {
   const [patients, setPatients] = useState([]);
   const [patientsState, setPatientsState] = useState('Loading');
   const [patientsError, setPatientsError] = useState('');
+  const [selectedPatientId, setSelectedPatientId] = useState('');
+  const [selectedPatient, setSelectedPatient] = useState(null);
+  const [selectedPatientState, setSelectedPatientState] = useState('Idle');
+  const [selectedPatientError, setSelectedPatientError] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -44,6 +48,9 @@ export default function App() {
         setPatients(data);
         setPatientsState('Loaded');
         setPatientsError('');
+        if (data.length > 0) {
+          setSelectedPatientId((currentId) => currentId || data[0].id);
+        }
       })
       .catch(() => {
         if (!active) return;
@@ -56,6 +63,32 @@ export default function App() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!selectedPatientId) return undefined;
+
+    let active = true;
+    setSelectedPatientState('Loading');
+
+    fetch(`/api/patients/${encodeURIComponent(selectedPatientId)}`)
+      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
+      .then((data) => {
+        if (!active) return;
+        setSelectedPatient(data);
+        setSelectedPatientState('Loaded');
+        setSelectedPatientError('');
+      })
+      .catch(() => {
+        if (!active) return;
+        setSelectedPatient(null);
+        setSelectedPatientState('Offline');
+        setSelectedPatientError('Patient details are unavailable.');
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [selectedPatientId]);
 
   const healthChecks = [
     { label: 'Web app', state: 'Ready', icon: CheckCircle2 },
@@ -135,19 +168,71 @@ export default function App() {
             )}
 
             {patients.map((patient) => (
-              <article className="patientRow" key={patient.id}>
+              <button
+                className={patient.id === selectedPatientId ? 'patientRow selected' : 'patientRow'}
+                key={patient.id}
+                type="button"
+                aria-pressed={patient.id === selectedPatientId}
+                onClick={() => setSelectedPatientId(patient.id)}
+              >
                 <time>{patient.appointment}</time>
                 <div>
                   <strong>{patient.name}</strong>
                   <span>{patient.reason}</span>
                 </div>
                 <em>{patient.status}</em>
-              </article>
+              </button>
             ))}
           </div>
         </div>
 
         <aside className="sidePanel">
+          <section className="detailCard" aria-labelledby="patient-detail-title">
+            <div className="iconBox">
+              <HeartPulse size={20} />
+            </div>
+            <p className="eyebrow">Patient file</p>
+            <h2 id="patient-detail-title">{selectedPatient?.name || 'Select a patient'}</h2>
+
+            {selectedPatientState === 'Loading' && (
+              <p className="detailMessage">Loading patient details...</p>
+            )}
+
+            {selectedPatientError && <p className="detailMessage error">{selectedPatientError}</p>}
+
+            {selectedPatientState === 'Loaded' && selectedPatient && (
+              <>
+                <dl className="detailGrid">
+                  <div>
+                    <dt>Date of birth</dt>
+                    <dd>{selectedPatient.dob}</dd>
+                  </div>
+                  <div>
+                    <dt>Contact</dt>
+                    <dd>{selectedPatient.contact}</dd>
+                  </div>
+                  <div>
+                    <dt>Last visit</dt>
+                    <dd>{selectedPatient.lastVisit}</dd>
+                  </div>
+                  <div>
+                    <dt>Notes</dt>
+                    <dd>{selectedPatient.noteCount}</dd>
+                  </div>
+                </dl>
+
+                <div className="timelinePreview">
+                  <strong>Next patient steps</strong>
+                  <ol>
+                    <li>Review current visit reason</li>
+                    <li>Add or update medical note</li>
+                    <li>Generate summary when notes are ready</li>
+                  </ol>
+                </div>
+              </>
+            )}
+          </section>
+
           <section className="noteCard" id="notes" aria-labelledby="notes-title">
             <div className="iconBox">
               <FileText size={20} />

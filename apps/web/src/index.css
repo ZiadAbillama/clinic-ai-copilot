@@ -248,6 +248,7 @@ h3 {
 }
 
 .patientPanel,
+.detailCard,
 .noteCard,
 .reviewCard,
 .architecture article {
@@ -299,13 +300,27 @@ h3 {
   grid-template-columns: 84px minmax(0, 1fr) auto;
   gap: 16px;
   align-items: center;
+  width: 100%;
   min-height: 86px;
   padding: 16px 24px;
+  color: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
   border-bottom: 1px solid var(--line);
 }
 
 .patientRow:last-child {
   border-bottom: 0;
+}
+
+.patientRow:hover,
+.patientRow.selected {
+  background: var(--cyan-faint);
+}
+
+.patientRow.selected {
+  box-shadow: inset 4px 0 0 var(--cyan);
 }
 
 .patientRow time {
@@ -346,6 +361,7 @@ h3 {
   gap: 20px;
 }
 
+.detailCard,
 .noteCard,
 .reviewCard {
   padding: 24px;
@@ -390,6 +406,67 @@ h3 {
 .reviewCard svg {
   color: var(--cyan);
   margin-top: 2px;
+}
+
+.detailMessage {
+  margin: 18px 0 0;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.detailMessage.error {
+  color: #9f1239;
+}
+
+.detailGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 20px 0 0;
+}
+
+.detailGrid div {
+  min-height: 78px;
+  padding: 14px;
+  background: var(--cyan-faint);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.detailGrid dt {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.detailGrid dd {
+  margin: 8px 0 0;
+  color: var(--ink);
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+
+.timelinePreview {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.timelinePreview strong {
+  display: block;
+  color: var(--ink);
+  font-family: 'Figtree', Arial, sans-serif;
+  font-size: 18px;
+}
+
+.timelinePreview ol {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding-left: 18px;
+  color: var(--ink-soft);
+  font-weight: 700;
 }
 
 .architecture {
