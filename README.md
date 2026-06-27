@@ -1,6 +1,6 @@
 # Clinic AI Copilot
 
-Clinic AI Copilot is a staged training project for building an AI-enabled medical operations platform. The system will help clinic staff manage patients, appointments, medical notes, and AI-assisted summaries while keeping human review in control.
+Clinic AI Copilot is a staged training project for building a simple AI-assisted clinic workspace for a single role: the doctor. The system helps a doctor manage patients, medical notes, and AI-assisted summaries while keeping human review in control.
 
 ## Project Status
 
@@ -11,40 +11,29 @@ Completed:
 - Stage 0 domain summary
 - Stage 1 development environment check
 - Initial monorepo skeleton
-- First Next.js dashboard design
+- React (Vite) doctor dashboard design
+- Express health and patients API
 
 ## Architecture Overview
 
 ```mermaid
 flowchart LR
-    Staff["Clinic staff dashboard"] --> Web["Next.js web app"]
-    Web --> Api["API Gateway"]
-    Api --> Patients["Patient Service"]
-    Api --> Appointments["Appointment Service"]
-    Api --> Notes["Notes Service"]
-    Api --> Ai["AI Service"]
-    Patients --> Postgres["PostgreSQL"]
-    Appointments --> Postgres
-    Notes --> Postgres
-    Notes --> Mongo["MongoDB"]
-    Ai --> Mongo
-    Ai --> VectorDb["Vector DB"]
-    Api --> Redis["Redis"]
+    Doctor["Doctor dashboard"] --> Web["React web app (Vite)"]
+    Web --> Api["Express API"]
+    Api --> Postgres["PostgreSQL (later)"]
+    Api --> Mongo["MongoDB (later)"]
+    Api --> Ai["AI summaries (later)"]
 ```
 
 ## Repository Structure
 
 ```text
 apps/
-  web/                       Next.js clinic staff dashboard
+  web/                       React (Vite) doctor dashboard
 services/
-  api-gateway/               Public backend entry point, validation, auth, routing
-  patient-service/           Patient profile and registration workflows
-  appointment-service/       Appointment scheduling workflows
-  notes-service/             Medical note metadata and note workflows
-  ai-service/                Summarization, semantic search, assistant workflows
+  api/                       Express backend (health, patients, AI workflows later)
 packages/
-  shared/                    Shared types, constants, and utilities
+  shared/                    Shared constants and utilities
 infra/
   docker/                    Local Docker assets and compose-related files
   deployment/                Staging/cloud deployment manifests and notes
@@ -53,19 +42,19 @@ docs/                        Project planning, stage notes, and architecture doc
 
 ## Technology Stack
 
-- Frontend: Next.js
-- Backend: Node.js / NestJS
-- SQL database: PostgreSQL
-- NoSQL database: MongoDB
-- Cache and queues: Redis
-- AI memory: vector database
-- Local infrastructure: Docker Compose
+- Language: JavaScript only (no TypeScript)
+- Frontend: React with Vite
+- Backend: Node.js with Express
+- SQL database: PostgreSQL (later stage)
+- NoSQL database: MongoDB (later stage)
+- AI: summarization and semantic search (later stage)
+- Local infrastructure: Docker Compose (later stage)
 
 ## Local Setup
 
 Verify the base tools:
 
-```powershell
+```bash
 node -v
 yarn -v
 git --version
@@ -75,13 +64,19 @@ docker compose version
 
 Install dependencies:
 
-```powershell
+```bash
 yarn install
 ```
 
-Run the frontend:
+Run the backend API:
 
-```powershell
+```bash
+yarn api:dev
+```
+
+Run the frontend (in a second terminal):
+
+```bash
 yarn web:dev
 ```
 
@@ -91,6 +86,8 @@ Then open:
 http://localhost:3000
 ```
 
+The Vite dev server proxies `/api` requests to the Express API on port 3001.
+
 ## Environment Variables
 
 Copy `.env.example` to `.env` when local services are introduced.
@@ -99,8 +96,10 @@ Never commit real secrets.
 
 ## Development Conventions
 
+- Use JavaScript only; do not add TypeScript.
+- Keep the app simple and focused on a single role: doctor.
 - Keep app code in `apps/`.
-- Keep independently deployable backend modules in `services/`.
+- Keep the backend in `services/api`.
 - Keep reusable internal code in `packages/`.
 - Keep Docker and deployment assets in `infra/`.
 - Keep project notes, stage deliverables, and architecture records in `docs/`.
@@ -111,10 +110,10 @@ Never commit real secrets.
 - [Domain summary](docs/Domain_Summary.md)
 - [Stage 1 environment check](docs/STAGE_1_ENVIRONMENT_CHECK.md)
 - [Stage 2 repository structure](docs/STAGE_2_REPOSITORY_STRUCTURE.md)
+- [Stage 3 frontend design](docs/STAGE_3_FRONTEND_DESIGN.md)
 
 ## Known Limitations
 
-- The frontend currently uses mock data only.
-- The backend health API has not been created yet.
-- Docker Compose services have not been defined yet.
+- The frontend and API currently use mock data only.
 - Databases and AI workflows will be introduced in later stages.
+- Docker Compose services have not been defined yet.

@@ -2,17 +2,13 @@
 
 ## Goal
 
-Create a clean monorepo that separates frontend, backend services, shared packages, infrastructure, and documentation.
+Create a clean monorepo that separates the frontend, the backend API, shared packages, infrastructure, and documentation. The whole project uses JavaScript only (no TypeScript) and targets a single role: the doctor.
 
 ## Created Structure
 
 ```text
 apps/web
-services/api-gateway
-services/patient-service
-services/appointment-service
-services/notes-service
-services/ai-service
+services/api
 packages/shared
 infra/docker
 infra/deployment
