@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Activity,
   CheckCircle2,
@@ -11,6 +11,16 @@ import {
 } from 'lucide-react';
 
 const aiQueue = ['Summarize visit note', 'Search prior notes', 'Mark output for review'];
+const emptyPatientForm = {
+  name: '',
+  dob: '',
+  contact: '',
+  reason: '',
+  appointment: '',
+  status: 'Scheduled',
+  lastVisit: '',
+  noteCount: 0,
+};
 
 export default function App() {
   const [apiState, setApiState] = useState('Checking');
@@ -21,6 +31,98 @@ export default function App() {
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [selectedPatientState, setSelectedPatientState] = useState('Idle');
   const [selectedPatientError, setSelectedPatientError] = useState('');
+  const [formMode, setFormMode] = useState('create');
+  const [patientForm, setPatientForm] = useState(emptyPatientForm);
+  const [formStatus, setFormStatus] = useState('Idle');
+  const [formError, setFormError] = useState('');
+
+  const refreshPatients = useCallback((preferredPatientId) => {
+    setPatientsState('Loading');
+
+    return fetch('/api/patients')
+      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
+      .then((data) => {
+        setPatients(data);
+        setPatientsState('Loaded');
+        setPatientsError('');
+        if (data.length > 0) {
+          setSelectedPatientId((currentId) => preferredPatientId || currentId || data[0].id);
+        }
+        return data;
+      })
+      .catch(() => {
+        setPatients([]);
+        setPatientsState('Offline');
+        setPatientsError('Patient data is unavailable. Start the API and refresh.');
+        return [];
+      });
+  }, []);
+
+  const setFormFromPatient = useCallback((patient) => {
+    setPatientForm({
+      name: patient.name || '',
+      dob: patient.dob || '',
+      contact: patient.contact || '',
+      reason: patient.reason || '',
+      appointment: patient.appointment || '',
+      status: patient.status || 'Scheduled',
+      lastVisit: patient.lastVisit || '',
+      noteCount: patient.noteCount || 0,
+    });
+  }, []);
+
+  function handleFormChange(event) {
+    const { name, value } = event.target;
+    setPatientForm((currentForm) => ({
+      ...currentForm,
+      [name]: name === 'noteCount' ? Number(value) : value,
+    }));
+  }
+
+  function startNewPatient() {
+    setFormMode('create');
+    setPatientForm(emptyPatientForm);
+    setFormError('');
+    setFormStatus('Idle');
+  }
+
+  function startEditingPatient() {
+    if (!selectedPatient) return;
+    setFormMode('edit');
+    setFormFromPatient(selectedPatient);
+    setFormError('');
+    setFormStatus('Idle');
+  }
+
+  function handlePatientSubmit(event) {
+    event.preventDefault();
+    setFormStatus('Saving');
+    setFormError('');
+
+    const isEditing = formMode === 'edit' && selectedPatientId;
+    const url = isEditing
+      ? `/api/patients/${encodeURIComponent(selectedPatientId)}`
+      : '/api/patients';
+
+    fetch(url, {
+      method: isEditing ? 'PATCH' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patientForm),
+    })
+      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
+      .then((patient) => {
+        setSelectedPatient(patient);
+        setSelectedPatientId(patient.id);
+        setFormMode('edit');
+        setFormFromPatient(patient);
+        setFormStatus('Saved');
+        return refreshPatients(patient.id);
+      })
+      .catch(() => {
+        setFormStatus('Error');
+        setFormError('Could not save patient. Check the API and try again.');
+      });
+  }
 
   useEffect(() => {
     let active = true;
@@ -39,30 +141,8 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    let active = true;
-
-    fetch('/api/patients')
-      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
-      .then((data) => {
-        if (!active) return;
-        setPatients(data);
-        setPatientsState('Loaded');
-        setPatientsError('');
-        if (data.length > 0) {
-          setSelectedPatientId((currentId) => currentId || data[0].id);
-        }
-      })
-      .catch(() => {
-        if (!active) return;
-        setPatients([]);
-        setPatientsState('Offline');
-        setPatientsError('Patient data is unavailable. Start the API and refresh.');
-      });
-
-    return () => {
-      active = false;
-    };
-  }, []);
+    refreshPatients();
+  }, [refreshPatients]);
 
   useEffect(() => {
     if (!selectedPatientId) return undefined;
@@ -77,6 +157,7 @@ export default function App() {
         setSelectedPatient(data);
         setSelectedPatientState('Loaded');
         setSelectedPatientError('');
+        if (formMode === 'edit') setFormFromPatient(data);
       })
       .catch(() => {
         if (!active) return;
@@ -88,7 +169,7 @@ export default function App() {
     return () => {
       active = false;
     };
-  }, [selectedPatientId]);
+  }, [formMode, selectedPatientId, setFormFromPatient]);
 
   const healthChecks = [
     { label: 'Web app', state: 'Ready', icon: CheckCircle2 },
@@ -155,7 +236,14 @@ export default function App() {
               <p className="eyebrow">Patients</p>
               <h2>Today</h2>
             </div>
-            <span>{patientsState === 'Loaded' ? `${patients.length} active` : patientsState}</span>
+            <div className="panelActions">
+              <span>
+                {patientsState === 'Loaded' ? `${patients.length} active` : patientsState}
+              </span>
+              <button type="button" onClick={startNewPatient}>
+                New
+              </button>
+            </div>
           </div>
 
           <div className="patientList">
@@ -229,8 +317,99 @@ export default function App() {
                     <li>Generate summary when notes are ready</li>
                   </ol>
                 </div>
+                <button className="secondaryButton" type="button" onClick={startEditingPatient}>
+                  Edit patient
+                </button>
               </>
             )}
+          </section>
+
+          <section className="formCard" aria-labelledby="patient-form-title">
+            <p className="eyebrow">{formMode === 'edit' ? 'Edit patient' : 'New patient'}</p>
+            <h2 id="patient-form-title">
+              {formMode === 'edit' ? 'Update patient file' : 'Create patient'}
+            </h2>
+
+            <form className="patientForm" onSubmit={handlePatientSubmit}>
+              <label>
+                Name
+                <input
+                  name="name"
+                  value={patientForm.name}
+                  onChange={handleFormChange}
+                  placeholder="Patient name"
+                  required
+                />
+              </label>
+              <label>
+                Date of birth
+                <input name="dob" value={patientForm.dob} onChange={handleFormChange} type="date" />
+              </label>
+              <label>
+                Contact
+                <input
+                  name="contact"
+                  value={patientForm.contact}
+                  onChange={handleFormChange}
+                  placeholder="+961 ..."
+                />
+              </label>
+              <label>
+                Appointment
+                <input
+                  name="appointment"
+                  value={patientForm.appointment}
+                  onChange={handleFormChange}
+                  type="time"
+                />
+              </label>
+              <label className="wideField">
+                Visit reason
+                <input
+                  name="reason"
+                  value={patientForm.reason}
+                  onChange={handleFormChange}
+                  placeholder="Reason for visit"
+                />
+              </label>
+              <label>
+                Status
+                <select name="status" value={patientForm.status} onChange={handleFormChange}>
+                  <option>Scheduled</option>
+                  <option>Checked in</option>
+                  <option>Needs vitals</option>
+                  <option>Doctor review</option>
+                  <option>Completed</option>
+                  <option>Cancelled</option>
+                </select>
+              </label>
+              <label>
+                Last visit
+                <input
+                  name="lastVisit"
+                  value={patientForm.lastVisit}
+                  onChange={handleFormChange}
+                  placeholder="YYYY-MM-DD or New patient"
+                />
+              </label>
+              <label>
+                Notes
+                <input
+                  min="0"
+                  name="noteCount"
+                  value={patientForm.noteCount}
+                  onChange={handleFormChange}
+                  type="number"
+                />
+              </label>
+
+              {formError && <p className="formMessage error">{formError}</p>}
+              {formStatus === 'Saved' && <p className="formMessage">Patient saved.</p>}
+
+              <button className="primaryButton" disabled={formStatus === 'Saving'} type="submit">
+                {formStatus === 'Saving' ? 'Saving...' : 'Save patient'}
+              </button>
+            </form>
           </section>
 
           <section className="noteCard" id="notes" aria-labelledby="notes-title">

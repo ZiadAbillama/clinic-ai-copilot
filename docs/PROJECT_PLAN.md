@@ -85,11 +85,12 @@ Current (✅):
 - `GET /api/health` — service status
 - `GET /api/patients` — list from MongoDB Atlas
 - `GET /api/patients/:id` — single from MongoDB Atlas
+- `POST /api/patients` — create a patient for the demo doctor
+- `PATCH /api/patients/:id` — update a patient for the demo doctor
 
 Planned (⬜, all JWT-protected and doctor-scoped):
 
 - `POST /api/auth/register`, `POST /api/auth/login`
-- `GET/POST/PATCH /api/patients`, `GET /api/patients/:id`
 - `GET/POST/PATCH /api/appointments` (visits)
 - `GET/POST/PATCH /api/notes` (visit-linked or standalone)
 - `GET /api/patients/:id/timeline`
@@ -107,7 +108,7 @@ Planned (⬜, all JWT-protected and doctor-scoped):
 | 3     | Frontend design slice + health/patients API | ✅     |
 | 4     | MongoDB + Mongoose models                   | 🟡     |
 | 5     | Auth (JWT, multi-doctor, data isolation)    | ⬜     |
-| 6     | Patients + visits + notes CRUD              | ⬜     |
+| 6     | Patients + visits + notes CRUD              | 🟡     |
 | 7     | Patient timeline                            | ⬜     |
 | 8     | AI summarization (Ollama) + review workflow | ⬜     |
 | 9     | Note search + audit log                     | ⬜     |
@@ -116,5 +117,6 @@ Planned (⬜, all JWT-protected and doctor-scoped):
 ## 8. Known Limitations (current)
 
 - Patient data uses MongoDB Atlas, seeded from starter data.
+- Patient create/edit exists, but richer validation and duplicate handling are still basic.
 - No auth; the API is unscoped and public.
 - No appointments, notes, timeline, AI, search, or audit log persistence yet.

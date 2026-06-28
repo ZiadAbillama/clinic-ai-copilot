@@ -249,6 +249,7 @@ h3 {
 
 .patientPanel,
 .detailCard,
+.formCard,
 .noteCard,
 .reviewCard,
 .architecture article {
@@ -276,6 +277,39 @@ h3 {
   font-family: 'JetBrains Mono', monospace;
   font-size: 12px;
   font-weight: 700;
+}
+
+.panelActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.panelActions button,
+.secondaryButton,
+.primaryButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 900;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.panelActions button,
+.secondaryButton {
+  padding: 0 14px;
+  background: var(--cyan-faint);
+}
+
+.panelActions button:hover,
+.secondaryButton:hover {
+  border-color: var(--cyan);
 }
 
 .patientList {
@@ -362,9 +396,14 @@ h3 {
 }
 
 .detailCard,
+.formCard,
 .noteCard,
 .reviewCard {
   padding: 24px;
+}
+
+.secondaryButton {
+  margin-top: 18px;
 }
 
 .iconBox {
@@ -469,6 +508,72 @@ h3 {
   font-weight: 700;
 }
 
+.patientForm {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 20px;
+}
+
+.patientForm label {
+  display: grid;
+  gap: 7px;
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.patientForm input,
+.patientForm select {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
+  color: var(--ink);
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+}
+
+.patientForm input:focus,
+.patientForm select:focus {
+  outline: 4px solid rgba(18, 184, 232, 0.22);
+  border-color: var(--cyan);
+}
+
+.wideField,
+.formMessage,
+.primaryButton {
+  grid-column: 1 / -1;
+}
+
+.formMessage {
+  margin: 0;
+  color: var(--ink-soft);
+  font-weight: 800;
+}
+
+.formMessage.error {
+  color: #9f1239;
+}
+
+.primaryButton {
+  justify-content: center;
+  color: var(--white);
+  background: var(--cyan);
+  border-color: var(--cyan);
+}
+
+.primaryButton:hover {
+  background: #0f9fca;
+  border-color: #0f9fca;
+}
+
+.primaryButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.64;
+}
+
 .architecture {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -530,6 +635,15 @@ h3 {
     grid-column: 2;
     justify-self: start;
     white-space: normal;
+  }
+
+  .panelActions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .patientForm {
+    grid-template-columns: 1fr;
   }
 
   .architecture {
