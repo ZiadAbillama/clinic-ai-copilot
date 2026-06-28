@@ -19,7 +19,7 @@ approves or rejects → everything appears on the patient timeline.
 | Language | JavaScript only (no TypeScript)                                      | ✅     |
 | Frontend | React with Vite                                                      | ✅     |
 | Backend  | Node.js with Express (single API service)                            | ✅     |
-| Database | MongoDB only, via Mongoose (no PostgreSQL)                           | 🟡     |
+| Database | MongoDB only, via Mongoose (no PostgreSQL)                           | ✅     |
 | AI       | Local Ollama server, model `llama3.1:8b` at `http://localhost:11434` | ⬜     |
 | Auth     | Multiple doctors, isolated data, real JWT                            | ⬜     |
 | Search   | MongoDB text search (semantic later)                                 | ⬜     |
@@ -39,12 +39,12 @@ approves or rejects → everything appears on the patient timeline.
 | 1   | Doctor dashboard      | Home: this doctor's patients, today's visits, AI/system status | 🟡     |
 | 2   | Patient management    | List / open / create / edit patients                           | 🟡     |
 | 3   | Appointments (visits) | Today's visit list, backed by MongoDB                          | 🟡     |
-| 4   | Medical notes         | Attached to a visit **or standalone** on a patient             | ⬜     |
-| 5   | Patient timeline      | Merged visits + notes, newest-first                            | ⬜     |
+| 4   | Medical notes         | Attached to a visit **or standalone** on a patient             | 🟡     |
+| 5   | Patient timeline      | Merged visits + notes, newest-first                            | 🟡     |
 | 6   | AI summarization      | Local Ollama drafts a note summary                             | ⬜     |
 | 7   | AI review             | Draft → Approved / Rejected; only Approved counts              | ⬜     |
 | 8   | Note search           | MongoDB text search over notes                                 | ⬜     |
-| 9   | Audit log             | Record key doctor actions                                      | ⬜     |
+| 9   | Audit log             | Record key doctor actions                                      | 🟡     |
 | 10  | Auth                  | Multiple doctors, isolated data, JWT                           | ⬜     |
 
 ### Feature detail notes
@@ -55,8 +55,15 @@ approves or rejects → everything appears on the patient timeline.
   doctor, backed by MongoDB Atlas.
 - **Appointments (🟡):** Appointment model, today's visit list, and basic
   schedule/edit controls exist. Visit history is not built yet.
-- **Database (🟡):** Mongoose connection, Patient model, and Appointment model
-  exist. Notes, summaries, users, and audit logs are not built yet.
+- **Database (✅):** Mongoose connection and planned model layer exist for
+  Doctor, Patient, Appointment, Note, AiSummary, and AuditLog.
+- **Medical notes (🟡):** Notes can be created, edited, deleted, and linked to a
+  visit or saved as standalone patient notes. AI summaries are not attached yet.
+- **Patient timeline (🟡):** Patient timeline API and UI merge visits + notes,
+  newest-first. AI summaries are not shown yet.
+- **Audit log (🟡):** AuditLog model exists and note create/update/delete plus
+  patient delete are recorded. Full action coverage and an audit viewer are not
+  built yet.
 - **Visit statuses:** `Scheduled` → `In progress` → `Completed` → `Cancelled`.
   "Start now" creates the visit directly as `In progress`; "Schedule" creates it as
   `Scheduled`.
@@ -92,12 +99,15 @@ Current (✅):
 - `GET /api/appointments` — today's visits with patient data from MongoDB Atlas
 - `POST /api/appointments` — create a visit for a patient
 - `PATCH /api/appointments/:id` — update a visit
+- `GET /api/notes` — list notes, optionally filtered by patient or visit
+- `POST /api/notes` — create a standalone or visit-linked note
+- `PATCH /api/notes/:id` — update a note
+- `DELETE /api/notes/:id` — delete a note
+- `GET /api/patients/:id/timeline` — merged visits + notes for one patient
 
 Planned (⬜, all JWT-protected and doctor-scoped):
 
 - `POST /api/auth/register`, `POST /api/auth/login`
-- `GET/POST/PATCH /api/notes` (visit-linked or standalone)
-- `GET /api/patients/:id/timeline`
 - `POST /api/notes/:id/summarize` (Ollama) and `PATCH /api/summaries/:id` (approve/reject)
 - `GET /api/notes/search?q=`
 - Audit log written on key actions
@@ -110,10 +120,10 @@ Planned (⬜, all JWT-protected and doctor-scoped):
 | 1     | Environment check                           | ✅     |
 | 2     | Repository structure (monorepo, JS-only)    | ✅     |
 | 3     | Frontend design slice + health/patients API | ✅     |
-| 4     | MongoDB + Mongoose models                   | 🟡     |
+| 4     | MongoDB + Mongoose models                   | ✅     |
 | 5     | Auth (JWT, multi-doctor, data isolation)    | ⬜     |
 | 6     | Patients + visits + notes CRUD              | 🟡     |
-| 7     | Patient timeline                            | ⬜     |
+| 7     | Patient timeline                            | 🟡     |
 | 8     | AI summarization (Ollama) + review workflow | ⬜     |
 | 9     | Note search + audit log                     | ⬜     |
 | 10    | Dockerize + deployment                      | ⬜     |
@@ -123,5 +133,6 @@ Planned (⬜, all JWT-protected and doctor-scoped):
 - Patient data uses MongoDB Atlas, seeded from starter data.
 - Patient create/edit/delete exists, but richer validation and duplicate handling are still basic.
 - No auth; the API is unscoped and public.
-- Appointment persistence and basic scheduling/editing exist; visit history is not built yet.
-- No notes, timeline, AI, search, or audit log persistence yet.
+- Appointment persistence and basic scheduling/editing exist.
+- Notes CRUD and the patient timeline exist, but note validation and UX are still basic.
+- No AI summary generation/review, note search, full audit viewer, or auth yet.

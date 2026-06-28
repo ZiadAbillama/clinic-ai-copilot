@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   CircleDashed,
+  FileText,
   HeartPulse,
   Pencil,
   Plus,
@@ -23,6 +24,11 @@ const emptyAppointmentForm = {
   scheduledTime: '',
   reason: '',
   status: 'Scheduled',
+};
+
+const emptyNoteForm = {
+  appointmentId: '',
+  text: '',
 };
 
 export default function App() {
@@ -51,6 +57,15 @@ export default function App() {
   const [appointmentFormError, setAppointmentFormError] = useState('');
   const [visitsOpen, setVisitsOpen] = useState(false);
   const [editingAppointmentId, setEditingAppointmentId] = useState('');
+  const [timelineOpen, setTimelineOpen] = useState(false);
+  const [timeline, setTimeline] = useState([]);
+  const [timelineState, setTimelineState] = useState('Idle');
+  const [timelineError, setTimelineError] = useState('');
+  const [noteFormMode, setNoteFormMode] = useState('closed');
+  const [noteForm, setNoteForm] = useState(emptyNoteForm);
+  const [noteFormStatus, setNoteFormStatus] = useState('Idle');
+  const [noteFormError, setNoteFormError] = useState('');
+  const [editingNoteId, setEditingNoteId] = useState('');
 
   const refreshWorkspace = useCallback((preferredPatientId) => {
     setPatientsState('Loading');
@@ -180,10 +195,19 @@ export default function App() {
     setEditingAppointmentId('');
   }
 
+  function closeNoteForm() {
+    setNoteFormMode('closed');
+    setNoteFormError('');
+    setNoteFormStatus('Idle');
+    setEditingNoteId('');
+  }
+
   function selectPatient(patientId) {
     setSelectedPatientId(patientId);
     closeAppointmentForm();
+    closeNoteForm();
     setVisitsOpen(false);
+    setTimelineOpen(false);
   }
 
   function handleAppointmentFormChange(event) {
@@ -192,6 +216,63 @@ export default function App() {
       ...currentForm,
       [name]: value,
     }));
+  }
+
+  function handleNoteFormChange(event) {
+    const { name, value } = event.target;
+    setNoteForm((currentForm) => ({
+      ...currentForm,
+      [name]: value,
+    }));
+  }
+
+  function loadTimeline(patientId = selectedPatientId) {
+    if (!patientId) return Promise.resolve();
+
+    setTimelineState('Loading');
+    setTimelineError('');
+
+    return fetch(`/api/patients/${encodeURIComponent(patientId)}/timeline`)
+      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
+      .then((data) => {
+        setTimeline(data.timeline || []);
+        setSelectedPatient(data.patient);
+        setTimelineState('Loaded');
+        setTimelineError('');
+        return data;
+      })
+      .catch(() => {
+        setTimeline([]);
+        setTimelineState('Offline');
+        setTimelineError('Timeline is unavailable. Check the API and try again.');
+      });
+  }
+
+  function toggleTimeline() {
+    if (timelineOpen) {
+      setTimelineOpen(false);
+      closeNoteForm();
+      return;
+    }
+
+    closeAppointmentForm();
+    setVisitsOpen(false);
+    setTimelineOpen(true);
+    loadTimeline();
+  }
+
+  function startNoteForm(mode, note) {
+    if (!selectedPatient) return;
+
+    setNoteFormMode(mode);
+    setEditingNoteId(note?.id || '');
+    setNoteForm({
+      appointmentId: note?.appointmentId || '',
+      text: note?.text || '',
+    });
+    setNoteFormError('');
+    setNoteFormStatus('Idle');
+    setTimelineOpen(true);
   }
 
   function handlePatientSubmit(event) {
@@ -262,7 +343,9 @@ export default function App() {
           setSelectedPatientId('');
           closePatientForm();
           closeAppointmentForm();
+          closeNoteForm();
           setVisitsOpen(false);
+          setTimelineOpen(false);
         }
         setNotice({
           tone: 'success',
@@ -306,6 +389,7 @@ export default function App() {
         setAppointmentFormMode('closed');
         setEditingAppointmentId('');
         setVisitsOpen(true);
+        setTimelineOpen(false);
         setNotice({
           tone: 'success',
           title: isEditing ? 'Visit updated' : 'Visit scheduled',
@@ -316,6 +400,62 @@ export default function App() {
       .catch(() => {
         setAppointmentFormStatus('Error');
         setAppointmentFormError('Could not save visit. Check the API and try again.');
+      });
+  }
+
+  function handleNoteSubmit(event) {
+    event.preventDefault();
+    if (!selectedPatientId) return;
+
+    const isEditing = noteFormMode === 'edit' && editingNoteId;
+    const url = isEditing ? `/api/notes/${encodeURIComponent(editingNoteId)}` : '/api/notes';
+
+    setNoteFormStatus('Saving');
+    setNoteFormError('');
+
+    fetch(url, {
+      method: isEditing ? 'PATCH' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...noteForm,
+        patientId: selectedPatientId,
+      }),
+    })
+      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
+      .then(() => {
+        setNoteFormStatus('Saved');
+        closeNoteForm();
+        setTimelineOpen(true);
+        setNotice({
+          tone: 'success',
+          title: isEditing ? 'Note updated' : 'Note added',
+          text: `${selectedPatient?.name || 'Patient'} timeline is up to date.`,
+        });
+        return Promise.all([loadTimeline(selectedPatientId), refreshWorkspace(selectedPatientId)]);
+      })
+      .catch(() => {
+        setNoteFormStatus('Error');
+        setNoteFormError('Could not save note. Check the API and try again.');
+      });
+  }
+
+  function deleteNote(note) {
+    if (!note) return;
+
+    fetch(`/api/notes/${encodeURIComponent(note.id)}`, {
+      method: 'DELETE',
+    })
+      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
+      .then(() => {
+        setNotice({
+          tone: 'success',
+          title: 'Note removed',
+          text: `${selectedPatient?.name || 'Patient'} timeline is up to date.`,
+        });
+        return Promise.all([loadTimeline(selectedPatientId), refreshWorkspace(selectedPatientId)]);
+      })
+      .catch(() => {
+        setTimelineError('Could not delete note. Check the API and try again.');
       });
   }
 
@@ -670,8 +810,18 @@ export default function App() {
                   </dl>
 
                   <div className="recordActions">
-                    <button type="button" onClick={() => setVisitsOpen((current) => !current)}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setVisitsOpen((current) => !current);
+                        setTimelineOpen(false);
+                        closeNoteForm();
+                      }}
+                    >
                       {visitsOpen ? 'Hide visits' : `View visits (${selectedPatientVisits.length})`}
+                    </button>
+                    <button type="button" onClick={toggleTimeline}>
+                      {timelineOpen ? 'Hide timeline' : 'Timeline'}
                     </button>
                   </div>
 
@@ -791,6 +941,112 @@ export default function App() {
                             </button>
                           </div>
                         </form>
+                      )}
+                    </section>
+                  )}
+
+                  {timelineOpen && (
+                    <section className="timelinePanel" aria-labelledby="timeline-panel-title">
+                      <div className="timelineHeader">
+                        <div>
+                          <p className="eyebrow">Timeline</p>
+                          <h3 id="timeline-panel-title">Visits and notes</h3>
+                        </div>
+                        {noteFormMode === 'closed' && (
+                          <button type="button" onClick={() => startNoteForm('create')}>
+                            Add note
+                          </button>
+                        )}
+                      </div>
+
+                      {timelineError && <p className="detailMessage error">{timelineError}</p>}
+                      {timelineState === 'Loading' && (
+                        <p className="detailMessage">Loading timeline...</p>
+                      )}
+
+                      {noteFormMode !== 'closed' && (
+                        <form className="noteForm" onSubmit={handleNoteSubmit}>
+                          <label>
+                            Visit
+                            <select
+                              name="appointmentId"
+                              value={noteForm.appointmentId}
+                              onChange={handleNoteFormChange}
+                            >
+                              <option value="">Standalone note</option>
+                              {selectedPatientVisits.map((visit) => (
+                                <option key={visit.id} value={visit.id}>
+                                  {visit.scheduledDate} {visit.scheduledTime} -{' '}
+                                  {visit.reason || 'Visit'}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label>
+                            Note
+                            <textarea
+                              name="text"
+                              value={noteForm.text}
+                              onChange={handleNoteFormChange}
+                              placeholder="Write the clinical note"
+                              required
+                            />
+                          </label>
+
+                          {noteFormError && <p className="formMessage error">{noteFormError}</p>}
+
+                          <div className="formActions">
+                            <button type="button" onClick={closeNoteForm}>
+                              Cancel
+                            </button>
+                            <button
+                              className="primaryButton"
+                              disabled={noteFormStatus === 'Saving'}
+                              type="submit"
+                            >
+                              {noteFormStatus === 'Saving' ? 'Saving...' : 'Save note'}
+                            </button>
+                          </div>
+                        </form>
+                      )}
+
+                      {noteFormMode === 'closed' && timelineState === 'Loaded' && (
+                        <div className="timelineList">
+                          {timeline.length === 0 && (
+                            <p className="detailMessage">No timeline entries yet.</p>
+                          )}
+
+                          {timeline.map((item) => (
+                            <article className="timelineItem" key={`${item.type}-${item.id}`}>
+                              <div className="timelineIcon">
+                                {item.type === 'note' ? (
+                                  <FileText size={16} />
+                                ) : (
+                                  <HeartPulse size={16} />
+                                )}
+                              </div>
+                              <div>
+                                <time dateTime={item.date}>
+                                  {item.date?.slice(0, 10)}
+                                  {item.time ? ` ${item.time}` : ''}
+                                </time>
+                                <strong>{item.title}</strong>
+                                {item.status && <span>{item.status}</span>}
+                                {item.text && <p>{item.text}</p>}
+                              </div>
+                              {item.type === 'note' && (
+                                <div className="timelineActions">
+                                  <button type="button" onClick={() => startNoteForm('edit', item)}>
+                                    Edit
+                                  </button>
+                                  <button type="button" onClick={() => deleteNote(item)}>
+                                    Delete
+                                  </button>
+                                </div>
+                              )}
+                            </article>
+                          ))}
+                        </div>
                       )}
                     </section>
                   )}

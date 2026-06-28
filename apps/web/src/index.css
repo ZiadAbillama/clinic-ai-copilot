@@ -411,6 +411,7 @@ h3 {
 .formHeader button,
 .patientRowActions button,
 .visitPanelHeader button,
+.timelineHeader button,
 .recordActions button,
 .visitRow button,
 .formActions button,
@@ -441,6 +442,7 @@ h3 {
 .panelActions button:hover,
 .formHeader button:hover,
 .visitPanelHeader button:hover,
+.timelineHeader button:hover,
 .recordActions button:hover,
 .visitRow button:hover,
 .formActions button:hover {
@@ -620,6 +622,8 @@ h3 {
 
 .recordActions {
   display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   justify-content: flex-end;
   margin-top: 18px;
 }
@@ -634,18 +638,21 @@ h3 {
   border-top: 1px solid var(--line);
 }
 
-.visitPanelHeader {
+.visitPanelHeader,
+.timelineHeader {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 14px;
 }
 
-.visitPanelHeader h3 {
+.visitPanelHeader h3,
+.timelineHeader h3 {
   font-size: 20px;
 }
 
-.visitPanelHeader button {
+.visitPanelHeader button,
+.timelineHeader button {
   min-height: 38px;
 }
 
@@ -693,16 +700,109 @@ h3 {
   font-weight: 800;
 }
 
+.timelinePanel {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.timelineList {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0 0;
+}
+
+.timelineItem {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  padding: 12px;
+  background: var(--cyan-faint);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.timelineIcon {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  color: var(--cyan);
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.timelineItem time,
+.timelineItem strong,
+.timelineItem span,
+.timelineItem p {
+  display: block;
+}
+
+.timelineItem time {
+  color: var(--cyan);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.timelineItem strong {
+  margin-top: 4px;
+  color: var(--ink);
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+
+.timelineItem span,
+.timelineItem p {
+  margin-top: 4px;
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.timelineActions {
+  display: flex;
+  gap: 8px;
+}
+
+.timelineActions button {
+  min-height: 34px;
+  padding: 0 10px;
+  color: var(--ink);
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.timelineActions button:last-child {
+  color: #9f1239;
+  border-color: #fecdd3;
+}
+
 .patientForm,
-.visitForm {
+.visitForm,
+.noteForm {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
   margin-top: 20px;
 }
 
+.noteForm {
+  grid-template-columns: 1fr;
+}
+
 .patientForm label,
-.visitForm label {
+.visitForm label,
+.noteForm label {
   display: grid;
   gap: 7px;
   color: var(--ink-soft);
@@ -713,7 +813,9 @@ h3 {
 .patientForm input,
 .patientForm select,
 .visitForm input,
-.visitForm select {
+.visitForm select,
+.noteForm select,
+.noteForm textarea {
   width: 100%;
   min-height: 42px;
   padding: 0 12px;
@@ -724,10 +826,18 @@ h3 {
   font: inherit;
 }
 
+.noteForm textarea {
+  min-height: 132px;
+  padding: 12px;
+  resize: vertical;
+}
+
 .patientForm input:focus,
 .patientForm select:focus,
 .visitForm input:focus,
-.visitForm select:focus {
+.visitForm select:focus,
+.noteForm select:focus,
+.noteForm textarea:focus {
   outline: 4px solid rgba(18, 184, 232, 0.22);
   border-color: var(--cyan);
 }
@@ -842,8 +952,17 @@ h3 {
   }
 
   .patientForm,
-  .visitForm {
+  .visitForm,
+  .noteForm {
     grid-template-columns: 1fr;
+  }
+
+  .timelineItem {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .timelineActions {
+    grid-column: 2;
   }
 }
 
