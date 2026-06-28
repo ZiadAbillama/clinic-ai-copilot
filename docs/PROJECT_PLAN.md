@@ -21,7 +21,7 @@ approves or rejects → everything appears on the patient timeline.
 | Backend  | Node.js with Express (single API service)                            | ✅     |
 | Database | MongoDB only, via Mongoose (no PostgreSQL)                           | ✅     |
 | AI       | Local Ollama server, model `llama3.1:8b` at `http://localhost:11434` | ⬜     |
-| Auth     | Multiple doctors, isolated data, real JWT                            | ⬜     |
+| Auth     | Multiple doctors, isolated data, real JWT                            | ✅     |
 | Search   | MongoDB text search (semantic later)                                 | ⬜     |
 | Infra    | Docker Compose (later)                                               | ⬜     |
 | Tooling  | Yarn workspaces, ESLint, Prettier                                    | ✅     |
@@ -45,7 +45,7 @@ approves or rejects → everything appears on the patient timeline.
 | 7   | AI review             | Draft → Approved / Rejected; only Approved counts              | ⬜     |
 | 8   | Note search           | MongoDB text search over notes                                 | ⬜     |
 | 9   | Audit log             | Record key doctor actions                                      | 🟡     |
-| 10  | Auth                  | Multiple doctors, isolated data, JWT                           | ⬜     |
+| 10  | Auth                  | Multiple doctors, isolated data, JWT                           | ✅     |
 
 ### Feature detail notes
 
@@ -64,6 +64,9 @@ approves or rejects → everything appears on the patient timeline.
 - **Audit log (🟡):** AuditLog model exists and note create/update/delete plus
   patient delete are recorded. Full action coverage and an audit viewer are not
   built yet.
+- **Auth (✅):** Doctors can register/login with JWT. Patient, appointment, note,
+  timeline, and audit routes are scoped to the authenticated doctor. The seed
+  script creates a demo doctor for existing starter data.
 - **Visit statuses:** `Scheduled` → `In progress` → `Completed` → `Cancelled`.
   "Start now" creates the visit directly as `In progress`; "Schedule" creates it as
   `Scheduled`.
@@ -91,11 +94,14 @@ the doctor) and sort newest-first; show each note's AI summary inline.
 Current (✅):
 
 - `GET /api/health` — service status
-- `GET /api/patients` — list from MongoDB Atlas
-- `GET /api/patients/:id` — single from MongoDB Atlas
-- `POST /api/patients` — create a patient for the demo doctor
-- `PATCH /api/patients/:id` — update a patient for the demo doctor
-- `DELETE /api/patients/:id` — remove a patient for the demo doctor
+- `POST /api/auth/register` — create a doctor account and return a JWT
+- `POST /api/auth/login` — sign in a doctor and return a JWT
+- `GET /api/auth/me` — return the authenticated doctor
+- `GET /api/patients` — list this doctor's patients from MongoDB Atlas
+- `GET /api/patients/:id` — single patient scoped to this doctor
+- `POST /api/patients` — create a patient for this doctor
+- `PATCH /api/patients/:id` — update this doctor's patient
+- `DELETE /api/patients/:id` — remove this doctor's patient
 - `GET /api/appointments` — today's visits with patient data from MongoDB Atlas
 - `POST /api/appointments` — create a visit for a patient
 - `PATCH /api/appointments/:id` — update a visit
@@ -107,7 +113,6 @@ Current (✅):
 
 Planned (⬜, all JWT-protected and doctor-scoped):
 
-- `POST /api/auth/register`, `POST /api/auth/login`
 - `POST /api/notes/:id/summarize` (Ollama) and `PATCH /api/summaries/:id` (approve/reject)
 - `GET /api/notes/search?q=`
 - Audit log written on key actions
@@ -121,7 +126,7 @@ Planned (⬜, all JWT-protected and doctor-scoped):
 | 2     | Repository structure (monorepo, JS-only)    | ✅     |
 | 3     | Frontend design slice + health/patients API | ✅     |
 | 4     | MongoDB + Mongoose models                   | ✅     |
-| 5     | Auth (JWT, multi-doctor, data isolation)    | ⬜     |
+| 5     | Auth (JWT, multi-doctor, data isolation)    | ✅     |
 | 6     | Patients + visits + notes CRUD              | 🟡     |
 | 7     | Patient timeline                            | 🟡     |
 | 8     | AI summarization (Ollama) + review workflow | ⬜     |
@@ -132,7 +137,8 @@ Planned (⬜, all JWT-protected and doctor-scoped):
 
 - Patient data uses MongoDB Atlas, seeded from starter data.
 - Patient create/edit/delete exists, but richer validation and duplicate handling are still basic.
-- No auth; the API is unscoped and public.
+- The demo doctor account is created by `yarn api:seed`; new doctor accounts start
+  with empty patient data by design.
 - Appointment persistence and basic scheduling/editing exist.
 - Notes CRUD and the patient timeline exist, but note validation and UX are still basic.
-- No AI summary generation/review, note search, full audit viewer, or auth yet.
+- No AI summary generation/review, note search, or full audit viewer yet.

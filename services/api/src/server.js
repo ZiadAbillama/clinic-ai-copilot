@@ -1,10 +1,13 @@
 import './env.js';
 import express from 'express';
 import cors from 'cors';
-import { DEMO_DOCTOR_ID } from './config.js';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import { JWT_EXPIRES_IN, JWT_SECRET } from './config.js';
 import { connectDatabase } from './db.js';
 import { AuditLog } from './models/AuditLog.js';
 import { Appointment } from './models/Appointment.js';
+import { Doctor } from './models/Doctor.js';
 import { Note } from './models/Note.js';
 import { Patient } from './models/Patient.js';
 
@@ -49,6 +52,50 @@ function createNoteId() {
 
 function createAuditLogId() {
   return `L-${Date.now().toString(36).toUpperCase()}`;
+}
+
+function createDoctorId() {
+  return `D-${Date.now().toString(36).toUpperCase()}`;
+}
+
+function cleanAuthInput(input = {}, { requireName = false } = {}) {
+  const name = String(input.name ?? '').trim();
+  const email = String(input.email ?? '')
+    .trim()
+    .toLowerCase();
+  const password = String(input.password ?? '');
+
+  if (requireName && !name) {
+    throw new Error('Doctor name is required.');
+  }
+
+  if (!email) {
+    throw new Error('Email is required.');
+  }
+
+  if (!password) {
+    throw new Error('Password is required.');
+  }
+
+  if (password.length < 8) {
+    throw new Error('Password must be at least 8 characters.');
+  }
+
+  return { name, email, password };
+}
+
+function publicDoctor(doctor) {
+  return {
+    id: doctor.id,
+    name: doctor.name,
+    email: doctor.email,
+  };
+}
+
+function createToken(doctor) {
+  return jwt.sign(publicDoctor(doctor), JWT_SECRET, {
+    expiresIn: JWT_EXPIRES_IN,
+  });
 }
 
 function cleanAppointmentInput(input = {}, { partial = false } = {}) {
@@ -99,9 +146,36 @@ function cleanNoteInput(input = {}, { partial = false } = {}) {
   return cleaned;
 }
 
-async function buildAppointmentResponse(appointment) {
+async function requireAuth(req, res, next) {
+  const authorization = req.headers.authorization || '';
+  const [scheme, token] = authorization.split(' ');
+
+  if (scheme !== 'Bearer' || !token) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
+
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    const doctor = await Doctor.findOne({ id: payload.id })
+      .select('-_id -__v -passwordHash')
+      .lean();
+
+    if (!doctor) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+
+    req.doctor = doctor;
+    next();
+  } catch {
+    res.status(401).json({ error: 'Authentication required' });
+  }
+}
+
+async function buildAppointmentResponse(appointment, doctorId) {
   const patient = await Patient.findOne({
-    doctorId: DEMO_DOCTOR_ID,
+    doctorId,
     id: appointment.patientId,
   })
     .select(patientPublicFields)
@@ -113,14 +187,14 @@ async function buildAppointmentResponse(appointment) {
   };
 }
 
-async function refreshPatientNoteCount(patientId) {
+async function refreshPatientNoteCount(doctorId, patientId) {
   const noteCount = await Note.countDocuments({
-    doctorId: DEMO_DOCTOR_ID,
+    doctorId,
     patientId,
   });
 
   await Patient.updateOne(
-    { doctorId: DEMO_DOCTOR_ID, id: patientId },
+    { doctorId, id: patientId },
     {
       $set: {
         noteCount,
@@ -131,10 +205,10 @@ async function refreshPatientNoteCount(patientId) {
   return noteCount;
 }
 
-async function writeAuditLog(action, targetType, targetId) {
+async function writeAuditLog(doctorId, action, targetType, targetId) {
   try {
     await AuditLog.create({
-      doctorId: DEMO_DOCTOR_ID,
+      doctorId,
       id: createAuditLogId(),
       action,
       targetType,
@@ -145,11 +219,11 @@ async function writeAuditLog(action, targetType, targetId) {
   }
 }
 
-async function upsertTodayAppointmentForPatient(patient) {
+async function upsertTodayAppointmentForPatient(doctorId, patient) {
   if (!patient.appointment && !patient.reason) return;
 
   await Appointment.updateOne(
-    { doctorId: DEMO_DOCTOR_ID, patientId: patient.id, scheduledDate: '2026-06-28' },
+    { doctorId, patientId: patient.id, scheduledDate: '2026-06-28' },
     {
       $set: {
         scheduledTime: patient.appointment || '',
@@ -157,7 +231,7 @@ async function upsertTodayAppointmentForPatient(patient) {
         status: patient.status || 'Scheduled',
       },
       $setOnInsert: {
-        doctorId: DEMO_DOCTOR_ID,
+        doctorId,
         patientId: patient.id,
         scheduledDate: '2026-06-28',
         id: createAppointmentId(),
@@ -167,9 +241,9 @@ async function upsertTodayAppointmentForPatient(patient) {
   );
 }
 
-async function syncPatientVisitFields(appointment) {
+async function syncPatientVisitFields(doctorId, appointment) {
   await Patient.updateOne(
-    { doctorId: DEMO_DOCTOR_ID, id: appointment.patientId },
+    { doctorId, id: appointment.patientId },
     {
       $set: {
         appointment: appointment.scheduledTime || '',
@@ -193,10 +267,85 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const payload = cleanAuthInput(req.body, { requireName: true });
+    const existingDoctor = await Doctor.findOne({ email: payload.email }).lean();
+
+    if (existingDoctor) {
+      res.status(409).json({ error: 'A doctor account already exists for this email.' });
+      return;
+    }
+
+    const doctor = await Doctor.create({
+      id: createDoctorId(),
+      name: payload.name,
+      email: payload.email,
+      passwordHash: await bcrypt.hash(payload.password, 12),
+    });
+
+    const doctorData = publicDoctor(doctor);
+    res.status(201).json({
+      doctor: doctorData,
+      token: createToken(doctorData),
+    });
+  } catch (error) {
+    if (
+      error.message === 'Doctor name is required.' ||
+      error.message === 'Email is required.' ||
+      error.message === 'Password is required.' ||
+      error.message === 'Password must be at least 8 characters.' ||
+      error.name === 'ValidationError'
+    ) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+
+    console.error(error);
+    res.status(500).json({ error: 'Failed to create account' });
+  }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const payload = cleanAuthInput(req.body);
+    const doctor = await Doctor.findOne({ email: payload.email }).lean();
+
+    if (!doctor || !(await bcrypt.compare(payload.password, doctor.passwordHash))) {
+      res.status(401).json({ error: 'Email or password is incorrect.' });
+      return;
+    }
+
+    const doctorData = publicDoctor(doctor);
+    res.json({
+      doctor: doctorData,
+      token: createToken(doctorData),
+    });
+  } catch (error) {
+    if (
+      error.message === 'Email is required.' ||
+      error.message === 'Password is required.' ||
+      error.message === 'Password must be at least 8 characters.'
+    ) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+
+    console.error(error);
+    res.status(500).json({ error: 'Failed to sign in' });
+  }
+});
+
+app.use('/api', requireAuth);
+
+app.get('/api/auth/me', (req, res) => {
+  res.json({ doctor: publicDoctor(req.doctor) });
+});
+
 // Patient records stored in MongoDB Atlas.
 app.get('/api/patients', async (req, res) => {
   try {
-    const patients = await Patient.find({ doctorId: DEMO_DOCTOR_ID })
+    const patients = await Patient.find({ doctorId: req.doctor.id })
       .select(patientPublicFields)
       .sort({ appointment: 1 })
       .lean();
@@ -211,7 +360,7 @@ app.get('/api/patients', async (req, res) => {
 app.get('/api/patients/:id', async (req, res) => {
   try {
     const patient = await Patient.findOne({
-      doctorId: DEMO_DOCTOR_ID,
+      doctorId: req.doctor.id,
       id: req.params.id,
     })
       .select(patientPublicFields)
@@ -232,7 +381,7 @@ app.get('/api/patients/:id', async (req, res) => {
 app.get('/api/appointments', async (req, res) => {
   try {
     const query = {
-      doctorId: DEMO_DOCTOR_ID,
+      doctorId: req.doctor.id,
     };
 
     if (req.query.date) {
@@ -244,7 +393,9 @@ app.get('/api/appointments', async (req, res) => {
       .sort({ scheduledDate: -1, scheduledTime: 1 })
       .lean();
 
-    const response = await Promise.all(appointments.map(buildAppointmentResponse));
+    const response = await Promise.all(
+      appointments.map((appointment) => buildAppointmentResponse(appointment, req.doctor.id)),
+    );
     res.json(response.filter((appointment) => appointment.patient));
   } catch (error) {
     console.error(error);
@@ -256,7 +407,7 @@ app.post('/api/appointments', async (req, res) => {
   try {
     const payload = cleanAppointmentInput(req.body);
     const patient = await Patient.findOne({
-      doctorId: DEMO_DOCTOR_ID,
+      doctorId: req.doctor.id,
       id: payload.patientId,
     }).lean();
 
@@ -271,15 +422,15 @@ app.post('/api/appointments', async (req, res) => {
       reason: '',
       status: 'Scheduled',
       ...payload,
-      doctorId: DEMO_DOCTOR_ID,
+      doctorId: req.doctor.id,
       id: createAppointmentId(),
     });
 
     const savedAppointment = await Appointment.findById(appointment._id)
       .select(appointmentPublicFields)
       .lean();
-    await syncPatientVisitFields(savedAppointment);
-    res.status(201).json(await buildAppointmentResponse(savedAppointment));
+    await syncPatientVisitFields(req.doctor.id, savedAppointment);
+    res.status(201).json(await buildAppointmentResponse(savedAppointment, req.doctor.id));
   } catch (error) {
     if (error.message === 'Patient is required.' || error.name === 'ValidationError') {
       res.status(400).json({ error: error.message });
@@ -295,7 +446,7 @@ app.patch('/api/appointments/:id', async (req, res) => {
   try {
     const payload = cleanAppointmentInput(req.body, { partial: true });
     const appointment = await Appointment.findOneAndUpdate(
-      { doctorId: DEMO_DOCTOR_ID, id: req.params.id },
+      { doctorId: req.doctor.id, id: req.params.id },
       { $set: payload },
       { new: true, runValidators: true },
     )
@@ -307,8 +458,8 @@ app.patch('/api/appointments/:id', async (req, res) => {
       return;
     }
 
-    await syncPatientVisitFields(appointment);
-    res.json(await buildAppointmentResponse(appointment));
+    await syncPatientVisitFields(req.doctor.id, appointment);
+    res.json(await buildAppointmentResponse(appointment, req.doctor.id));
   } catch (error) {
     if (error.name === 'ValidationError') {
       res.status(400).json({ error: error.message });
@@ -323,7 +474,7 @@ app.patch('/api/appointments/:id', async (req, res) => {
 app.get('/api/notes', async (req, res) => {
   try {
     const query = {
-      doctorId: DEMO_DOCTOR_ID,
+      doctorId: req.doctor.id,
     };
 
     if (req.query.patientId) {
@@ -346,7 +497,7 @@ app.post('/api/notes', async (req, res) => {
   try {
     const payload = cleanNoteInput(req.body);
     const patient = await Patient.findOne({
-      doctorId: DEMO_DOCTOR_ID,
+      doctorId: req.doctor.id,
       id: payload.patientId,
     }).lean();
 
@@ -357,7 +508,7 @@ app.post('/api/notes', async (req, res) => {
 
     if (payload.appointmentId) {
       const appointment = await Appointment.findOne({
-        doctorId: DEMO_DOCTOR_ID,
+        doctorId: req.doctor.id,
         id: payload.appointmentId,
         patientId: payload.patientId,
       }).lean();
@@ -370,13 +521,13 @@ app.post('/api/notes', async (req, res) => {
 
     const note = await Note.create({
       ...payload,
-      doctorId: DEMO_DOCTOR_ID,
+      doctorId: req.doctor.id,
       id: createNoteId(),
     });
 
     const savedNote = await Note.findById(note._id).select(notePublicFields).lean();
-    await refreshPatientNoteCount(savedNote.patientId);
-    await writeAuditLog('note.created', 'Note', savedNote.id);
+    await refreshPatientNoteCount(req.doctor.id, savedNote.patientId);
+    await writeAuditLog(req.doctor.id, 'note.created', 'Note', savedNote.id);
     res.status(201).json(savedNote);
   } catch (error) {
     if (
@@ -397,7 +548,7 @@ app.patch('/api/notes/:id', async (req, res) => {
   try {
     const payload = cleanNoteInput(req.body, { partial: true });
     const existingNote = await Note.findOne({
-      doctorId: DEMO_DOCTOR_ID,
+      doctorId: req.doctor.id,
       id: req.params.id,
     }).lean();
 
@@ -408,7 +559,7 @@ app.patch('/api/notes/:id', async (req, res) => {
 
     if (payload.appointmentId) {
       const appointment = await Appointment.findOne({
-        doctorId: DEMO_DOCTOR_ID,
+        doctorId: req.doctor.id,
         id: payload.appointmentId,
         patientId: existingNote.patientId,
       }).lean();
@@ -422,14 +573,14 @@ app.patch('/api/notes/:id', async (req, res) => {
     delete payload.patientId;
 
     const note = await Note.findOneAndUpdate(
-      { doctorId: DEMO_DOCTOR_ID, id: req.params.id },
+      { doctorId: req.doctor.id, id: req.params.id },
       { $set: payload },
       { new: true, runValidators: true },
     )
       .select(notePublicFields)
       .lean();
 
-    await writeAuditLog('note.updated', 'Note', note.id);
+    await writeAuditLog(req.doctor.id, 'note.updated', 'Note', note.id);
     res.json(note);
   } catch (error) {
     if (error.message === 'Note text is required.' || error.name === 'ValidationError') {
@@ -445,7 +596,7 @@ app.patch('/api/notes/:id', async (req, res) => {
 app.delete('/api/notes/:id', async (req, res) => {
   try {
     const note = await Note.findOneAndDelete({
-      doctorId: DEMO_DOCTOR_ID,
+      doctorId: req.doctor.id,
       id: req.params.id,
     })
       .select(notePublicFields)
@@ -456,8 +607,8 @@ app.delete('/api/notes/:id', async (req, res) => {
       return;
     }
 
-    await refreshPatientNoteCount(note.patientId);
-    await writeAuditLog('note.deleted', 'Note', note.id);
+    await refreshPatientNoteCount(req.doctor.id, note.patientId);
+    await writeAuditLog(req.doctor.id, 'note.deleted', 'Note', note.id);
     res.json({ deleted: true, note });
   } catch (error) {
     console.error(error);
@@ -468,7 +619,7 @@ app.delete('/api/notes/:id', async (req, res) => {
 app.get('/api/patients/:id/timeline', async (req, res) => {
   try {
     const patient = await Patient.findOne({
-      doctorId: DEMO_DOCTOR_ID,
+      doctorId: req.doctor.id,
       id: req.params.id,
     })
       .select(patientPublicFields)
@@ -481,13 +632,13 @@ app.get('/api/patients/:id/timeline', async (req, res) => {
 
     const [appointments, notes] = await Promise.all([
       Appointment.find({
-        doctorId: DEMO_DOCTOR_ID,
+        doctorId: req.doctor.id,
         patientId: req.params.id,
       })
         .select(appointmentPublicFields)
         .lean(),
       Note.find({
-        doctorId: DEMO_DOCTOR_ID,
+        doctorId: req.doctor.id,
         patientId: req.params.id,
       })
         .select(notePublicFields)
@@ -533,12 +684,12 @@ app.post('/api/patients', async (req, res) => {
     const payload = cleanPatientInput(req.body);
     const patient = await Patient.create({
       ...payload,
-      doctorId: DEMO_DOCTOR_ID,
+      doctorId: req.doctor.id,
       id: createPatientId(),
     });
 
     const savedPatient = await Patient.findById(patient._id).select(patientPublicFields).lean();
-    await upsertTodayAppointmentForPatient(savedPatient);
+    await upsertTodayAppointmentForPatient(req.doctor.id, savedPatient);
     res.status(201).json(savedPatient);
   } catch (error) {
     if (error.message === 'Patient name is required.' || error.name === 'ValidationError') {
@@ -555,7 +706,7 @@ app.patch('/api/patients/:id', async (req, res) => {
   try {
     const payload = cleanPatientInput(req.body, { partial: true });
     const patient = await Patient.findOneAndUpdate(
-      { doctorId: DEMO_DOCTOR_ID, id: req.params.id },
+      { doctorId: req.doctor.id, id: req.params.id },
       { $set: payload },
       { new: true, runValidators: true },
     )
@@ -567,7 +718,7 @@ app.patch('/api/patients/:id', async (req, res) => {
       return;
     }
 
-    await upsertTodayAppointmentForPatient(patient);
+    await upsertTodayAppointmentForPatient(req.doctor.id, patient);
     res.json(patient);
   } catch (error) {
     if (error.name === 'ValidationError') {
@@ -583,7 +734,7 @@ app.patch('/api/patients/:id', async (req, res) => {
 app.delete('/api/patients/:id', async (req, res) => {
   try {
     const patient = await Patient.findOneAndDelete({
-      doctorId: DEMO_DOCTOR_ID,
+      doctorId: req.doctor.id,
       id: req.params.id,
     })
       .select(patientPublicFields)
@@ -595,14 +746,14 @@ app.delete('/api/patients/:id', async (req, res) => {
     }
 
     await Appointment.deleteMany({
-      doctorId: DEMO_DOCTOR_ID,
+      doctorId: req.doctor.id,
       patientId: req.params.id,
     });
     await Note.deleteMany({
-      doctorId: DEMO_DOCTOR_ID,
+      doctorId: req.doctor.id,
       patientId: req.params.id,
     });
-    await writeAuditLog('patient.deleted', 'Patient', patient.id);
+    await writeAuditLog(req.doctor.id, 'patient.deleted', 'Patient', patient.id);
 
     res.json({ deleted: true, patient });
   } catch (error) {

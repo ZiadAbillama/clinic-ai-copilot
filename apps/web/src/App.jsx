@@ -10,6 +10,8 @@ import {
   X,
 } from 'lucide-react';
 
+const authStorageKey = 'clinic-ai-auth';
+
 const emptyPatientForm = {
   name: '',
   dob: '',
@@ -30,7 +32,29 @@ const emptyNoteForm = {
   text: '',
 };
 
+const emptyAuthForm = {
+  name: '',
+  email: '',
+  password: '',
+};
+
+function loadStoredSession() {
+  try {
+    const session = JSON.parse(window.localStorage.getItem(authStorageKey) || 'null');
+    return session?.token && session?.doctor ? session : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function App() {
+  const storedSession = loadStoredSession();
+  const [authToken, setAuthToken] = useState(storedSession?.token || '');
+  const [doctor, setDoctor] = useState(storedSession?.doctor || null);
+  const [authMode, setAuthMode] = useState('login');
+  const [authForm, setAuthForm] = useState(emptyAuthForm);
+  const [authStatus, setAuthStatus] = useState(authToken ? 'Checking' : 'Idle');
+  const [authError, setAuthError] = useState('');
   const [patients, setPatients] = useState([]);
   const [patientsState, setPatientsState] = useState('Loading');
   const [patientsError, setPatientsError] = useState('');
@@ -66,55 +90,90 @@ export default function App() {
   const [editingNoteId, setEditingNoteId] = useState('');
   const [patientSearch, setPatientSearch] = useState('');
 
-  const refreshWorkspace = useCallback((preferredPatientId) => {
-    setPatientsState('Loading');
-    setAppointmentsState('Loading');
-
-    const patientsRequest = fetch('/api/patients').then((res) =>
-      res.ok ? res.json() : Promise.reject(res),
-    );
-    const appointmentsRequest = fetch('/api/appointments').then((res) =>
-      res.ok ? res.json() : Promise.reject(res),
-    );
-
-    return Promise.allSettled([patientsRequest, appointmentsRequest]).then(
-      ([patientsResult, appointmentsResult]) => {
-        if (patientsResult.status === 'fulfilled') {
-          setPatients(patientsResult.value);
-          setPatientsState('Loaded');
-          setPatientsError('');
-
-          if (patientsResult.value.length > 0) {
-            setSelectedPatientId(
-              (currentId) => preferredPatientId || currentId || patientsResult.value[0].id,
-            );
-          } else {
-            setSelectedPatientId('');
-            setSelectedPatient(null);
-          }
-        } else {
-          setPatients([]);
-          setPatientsState('Offline');
-          setPatientsError('Patients are unavailable. Start the API and refresh.');
-        }
-
-        if (appointmentsResult.status === 'fulfilled') {
-          setAppointments(appointmentsResult.value);
-          setAppointmentsState('Loaded');
-          setAppointmentsError('');
-        } else {
-          setAppointments([]);
-          setAppointmentsState('Offline');
-          setAppointmentsError('Visits are unavailable. Patient records are still shown.');
-        }
-
-        return {
-          patients: patientsResult.status === 'fulfilled' ? patientsResult.value : [],
-          appointments: appointmentsResult.status === 'fulfilled' ? appointmentsResult.value : [],
-        };
-      },
-    );
+  const clearSession = useCallback(() => {
+    window.localStorage.removeItem(authStorageKey);
+    setAuthToken('');
+    setDoctor(null);
+    setPatients([]);
+    setAppointments([]);
+    setSelectedPatientId('');
+    setSelectedPatient(null);
+    setAuthStatus('Idle');
   }, []);
+
+  const apiFetch = useCallback(
+    (url, options = {}) =>
+      fetch(url, {
+        ...options,
+        headers: {
+          ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+          ...options.headers,
+        },
+      }).then((res) => {
+        if (res.status === 401) {
+          clearSession();
+        }
+
+        return res;
+      }),
+    [authToken, clearSession],
+  );
+
+  const refreshWorkspace = useCallback(
+    (preferredPatientId) => {
+      if (!authToken) return Promise.resolve({ patients: [], appointments: [] });
+
+      setPatientsState('Loading');
+      setAppointmentsState('Loading');
+
+      const patientsRequest = apiFetch('/api/patients').then((res) =>
+        res.ok ? res.json() : Promise.reject(res),
+      );
+      const appointmentsRequest = apiFetch('/api/appointments').then((res) =>
+        res.ok ? res.json() : Promise.reject(res),
+      );
+
+      return Promise.allSettled([patientsRequest, appointmentsRequest]).then(
+        ([patientsResult, appointmentsResult]) => {
+          if (patientsResult.status === 'fulfilled') {
+            setPatients(patientsResult.value);
+            setPatientsState('Loaded');
+            setPatientsError('');
+
+            if (patientsResult.value.length > 0) {
+              setSelectedPatientId(
+                (currentId) => preferredPatientId || currentId || patientsResult.value[0].id,
+              );
+            } else {
+              setSelectedPatientId('');
+              setSelectedPatient(null);
+            }
+          } else {
+            setPatients([]);
+            setPatientsState('Offline');
+            setPatientsError('Patients are unavailable. Start the API and refresh.');
+          }
+
+          if (appointmentsResult.status === 'fulfilled') {
+            setAppointments(appointmentsResult.value);
+            setAppointmentsState('Loaded');
+            setAppointmentsError('');
+          } else {
+            setAppointments([]);
+            setAppointmentsState('Offline');
+            setAppointmentsError('Visits are unavailable. Patient records are still shown.');
+          }
+
+          return {
+            patients: patientsResult.status === 'fulfilled' ? patientsResult.value : [],
+            appointments: appointmentsResult.status === 'fulfilled' ? appointmentsResult.value : [],
+          };
+        },
+      );
+    },
+    [apiFetch, authToken],
+  );
 
   const setFormFromPatient = useCallback((patient) => {
     setPatientForm({
@@ -231,7 +290,7 @@ export default function App() {
     setTimelineState('Loading');
     setTimelineError('');
 
-    return fetch(`/api/patients/${encodeURIComponent(patientId)}/timeline`)
+    return apiFetch(`/api/patients/${encodeURIComponent(patientId)}/timeline`)
       .then((res) => (res.ok ? res.json() : Promise.reject(res)))
       .then((data) => {
         setTimeline(data.timeline || []);
@@ -284,9 +343,8 @@ export default function App() {
       ? `/api/patients/${encodeURIComponent(selectedPatientId)}`
       : '/api/patients';
 
-    fetch(url, {
+    apiFetch(url, {
       method: isEditing ? 'PATCH' : 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patientForm),
     })
       .then((res) => (res.ok ? res.json() : Promise.reject(res)))
@@ -332,7 +390,7 @@ export default function App() {
     setAppointmentsState('Loading');
     setFormError('');
 
-    fetch(`/api/patients/${encodeURIComponent(patient.id)}`, {
+    apiFetch(`/api/patients/${encodeURIComponent(patient.id)}`, {
       method: 'DELETE',
     })
       .then((res) => (res.ok ? res.json() : Promise.reject(res)))
@@ -374,9 +432,8 @@ export default function App() {
     setAppointmentFormStatus('Saving');
     setAppointmentFormError('');
 
-    fetch(url, {
+    apiFetch(url, {
       method: isEditing ? 'PATCH' : 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         ...appointmentForm,
         patientId: selectedPatientId,
@@ -412,9 +469,8 @@ export default function App() {
     setNoteFormStatus('Saving');
     setNoteFormError('');
 
-    fetch(url, {
+    apiFetch(url, {
       method: isEditing ? 'PATCH' : 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         ...noteForm,
         patientId: selectedPatientId,
@@ -441,7 +497,7 @@ export default function App() {
   function deleteNote(note) {
     if (!note) return;
 
-    fetch(`/api/notes/${encodeURIComponent(note.id)}`, {
+    apiFetch(`/api/notes/${encodeURIComponent(note.id)}`, {
       method: 'DELETE',
     })
       .then((res) => (res.ok ? res.json() : Promise.reject(res)))
@@ -458,9 +514,90 @@ export default function App() {
       });
   }
 
+  function handleAuthChange(event) {
+    const { name, value } = event.target;
+    setAuthForm((currentForm) => ({
+      ...currentForm,
+      [name]: value,
+    }));
+  }
+
+  function switchAuthMode(mode) {
+    setAuthMode(mode);
+    setAuthError('');
+    setAuthStatus('Idle');
+  }
+
+  function saveSession(session) {
+    window.localStorage.setItem(authStorageKey, JSON.stringify(session));
+    setAuthToken(session.token);
+    setDoctor(session.doctor);
+    setAuthStatus('Signed in');
+    setAuthError('');
+    setAuthForm(emptyAuthForm);
+  }
+
+  function handleAuthSubmit(event) {
+    event.preventDefault();
+    setAuthStatus('Saving');
+    setAuthError('');
+
+    const isRegistering = authMode === 'register';
+    const payload = isRegistering
+      ? authForm
+      : {
+          email: authForm.email,
+          password: authForm.password,
+        };
+
+    fetch(isRegistering ? '/api/auth/register' : '/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Could not sign in.');
+        return data;
+      })
+      .then(saveSession)
+      .catch((error) => {
+        setAuthStatus('Error');
+        setAuthError(error.message || 'Could not sign in.');
+      });
+  }
+
+  function signOut() {
+    clearSession();
+    setNotice(null);
+  }
+
   useEffect(() => {
     refreshWorkspace();
   }, [refreshWorkspace]);
+
+  useEffect(() => {
+    if (!authToken) return undefined;
+
+    let active = true;
+    setAuthStatus('Checking');
+
+    apiFetch('/api/auth/me')
+      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
+      .then((data) => {
+        if (!active) return;
+        setDoctor(data.doctor);
+        setAuthStatus('Signed in');
+      })
+      .catch(() => {
+        if (!active) return;
+        clearSession();
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [apiFetch, authToken, clearSession]);
 
   useEffect(() => {
     if (!selectedPatientId) return undefined;
@@ -468,7 +605,7 @@ export default function App() {
     let active = true;
     setSelectedPatientState('Loading');
 
-    fetch(`/api/patients/${encodeURIComponent(selectedPatientId)}`)
+    apiFetch(`/api/patients/${encodeURIComponent(selectedPatientId)}`)
       .then((res) => (res.ok ? res.json() : Promise.reject(res)))
       .then((data) => {
         if (!active) return;
@@ -487,7 +624,7 @@ export default function App() {
     return () => {
       active = false;
     };
-  }, [formMode, selectedPatientId, setFormFromPatient]);
+  }, [apiFetch, formMode, selectedPatientId, setFormFromPatient]);
 
   useEffect(() => {
     if (!notice) return undefined;
@@ -579,6 +716,103 @@ export default function App() {
       .includes(search);
   });
 
+  if (!authToken) {
+    return (
+      <main className="appShell authShell">
+        <a className="brand authBrand" href="#top" aria-label="Clinic AI Copilot home">
+          <img
+            className="brandLogo"
+            src="/brand/clinikit-logo-horizontal.webp"
+            alt="CliniKit"
+            width={478}
+            height={104}
+          />
+        </a>
+
+        <section className="authScreen" id="top" aria-labelledby="auth-title">
+          <img
+            className="heroBackground"
+            src="/brand/clinikit-hero-background.webp"
+            alt=""
+            aria-hidden="true"
+          />
+
+          <div className="authCopy">
+            <p className="eyebrow">Doctor workspace</p>
+            <h1 id="auth-title">Clinic AI Copilot</h1>
+            <p>Sign in to manage your patients, visits, and notes.</p>
+          </div>
+
+          <section className="authPanel" aria-label="Doctor account">
+            <div className="authTabs" role="tablist" aria-label="Auth mode">
+              <button
+                className={authMode === 'login' ? 'active' : ''}
+                type="button"
+                onClick={() => switchAuthMode('login')}
+              >
+                Sign in
+              </button>
+              <button
+                className={authMode === 'register' ? 'active' : ''}
+                type="button"
+                onClick={() => switchAuthMode('register')}
+              >
+                Create account
+              </button>
+            </div>
+
+            <form className="authForm" onSubmit={handleAuthSubmit}>
+              {authMode === 'register' && (
+                <label>
+                  Name
+                  <input
+                    name="name"
+                    value={authForm.name}
+                    onChange={handleAuthChange}
+                    placeholder="Doctor name"
+                    required
+                  />
+                </label>
+              )}
+              <label>
+                Email
+                <input
+                  name="email"
+                  value={authForm.email}
+                  onChange={handleAuthChange}
+                  placeholder="doctor@clinic.com"
+                  required
+                  type="email"
+                />
+              </label>
+              <label>
+                Password
+                <input
+                  name="password"
+                  value={authForm.password}
+                  onChange={handleAuthChange}
+                  placeholder="At least 8 characters"
+                  required
+                  type="password"
+                />
+              </label>
+
+              {authError && <p className="formMessage error">{authError}</p>}
+
+              <button className="primaryButton" disabled={authStatus === 'Saving'} type="submit">
+                {authStatus === 'Saving'
+                  ? 'Please wait...'
+                  : authMode === 'register'
+                    ? 'Create account'
+                    : 'Sign in'}
+              </button>
+            </form>
+          </section>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="appShell">
       {notice && (
@@ -652,6 +886,10 @@ export default function App() {
             height={104}
           />
         </a>
+        <button className="sessionButton" type="button" onClick={signOut}>
+          Sign out
+          {doctor?.name ? <span>{doctor.name}</span> : null}
+        </button>
       </header>
 
       <section className="overview" id="top" aria-labelledby="overview-title">
