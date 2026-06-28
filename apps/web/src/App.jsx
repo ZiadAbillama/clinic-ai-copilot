@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 
 const authStorageKey = 'clinic-ai-auth';
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
 
 const emptyPatientForm = {
   name: '',
@@ -47,11 +48,15 @@ function loadStoredSession() {
   }
 }
 
+function apiUrl(path) {
+  return `${apiBaseUrl}${path}`;
+}
+
 export default function App() {
   const storedSession = loadStoredSession();
   const [authToken, setAuthToken] = useState(storedSession?.token || '');
   const [doctor, setDoctor] = useState(storedSession?.doctor || null);
-  const [authMode, setAuthMode] = useState('login');
+  const [authMode, setAuthMode] = useState('landing');
   const [authForm, setAuthForm] = useState(emptyAuthForm);
   const [authStatus, setAuthStatus] = useState(authToken ? 'Checking' : 'Idle');
   const [authError, setAuthError] = useState('');
@@ -103,7 +108,7 @@ export default function App() {
 
   const apiFetch = useCallback(
     (url, options = {}) =>
-      fetch(url, {
+      fetch(apiUrl(url), {
         ...options,
         headers: {
           ...(options.body ? { 'Content-Type': 'application/json' } : {}),
@@ -550,7 +555,7 @@ export default function App() {
           password: authForm.password,
         };
 
-    fetch(isRegistering ? '/api/auth/register' : '/api/auth/login', {
+    fetch(apiUrl(isRegistering ? '/api/auth/register' : '/api/auth/login'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -719,96 +724,142 @@ export default function App() {
   if (!authToken) {
     return (
       <main className="appShell authShell">
-        <a className="brand authBrand" href="#top" aria-label="Clinic AI Copilot home">
-          <img
-            className="brandLogo"
-            src="/brand/clinikit-logo-horizontal.webp"
-            alt="CliniKit"
-            width={478}
-            height={104}
-          />
-        </a>
+        {authMode === 'landing' ? (
+          <>
+            <header className="topBar">
+              <a className="brand" href="#top" aria-label="Clinic AI Copilot home">
+                <img
+                  className="brandLogo"
+                  src="/brand/clinikit-logo-horizontal.webp"
+                  alt="CliniKit"
+                  width={478}
+                  height={104}
+                />
+              </a>
+              <div className="authHeroActions" aria-label="Account actions">
+                <button type="button" onClick={() => switchAuthMode('login')}>
+                  Log in
+                </button>
+                <button type="button" onClick={() => switchAuthMode('register')}>
+                  Sign up
+                </button>
+              </div>
+            </header>
 
-        <section className="authScreen" id="top" aria-labelledby="auth-title">
-          <img
-            className="heroBackground"
-            src="/brand/clinikit-hero-background.webp"
-            alt=""
-            aria-hidden="true"
-          />
+            <section className="overview" id="top" aria-labelledby="auth-title">
+              <img
+                className="heroBackground"
+                src="/brand/clinikit-hero-background.webp"
+                alt=""
+                aria-hidden="true"
+              />
 
-          <div className="authCopy">
-            <p className="eyebrow">Doctor workspace</p>
-            <h1 id="auth-title">Clinic AI Copilot</h1>
-            <p>Sign in to manage your patients, visits, and notes.</p>
-          </div>
+              <div className="overviewCopy">
+                <p className="eyebrow">Doctor workspace</p>
+                <h1 id="auth-title">Clinic AI Copilot</h1>
+                <p>Review today&apos;s visits and update patient records.</p>
+              </div>
+            </section>
+          </>
+        ) : (
+          <section
+            className={authMode === 'register' ? 'authScreen registerScreen' : 'authScreen'}
+            id="top"
+            aria-labelledby="auth-title"
+          >
+            <img
+              className="heroBackground"
+              src="/brand/clinikit-hero-background.webp"
+              alt=""
+              aria-hidden="true"
+            />
 
-          <section className="authPanel" aria-label="Doctor account">
-            <div className="authTabs" role="tablist" aria-label="Auth mode">
-              <button
-                className={authMode === 'login' ? 'active' : ''}
-                type="button"
-                onClick={() => switchAuthMode('login')}
-              >
-                Sign in
-              </button>
-              <button
-                className={authMode === 'register' ? 'active' : ''}
-                type="button"
-                onClick={() => switchAuthMode('register')}
-              >
-                Create account
-              </button>
-            </div>
+            <button className="authBack" type="button" onClick={() => switchAuthMode('landing')}>
+              Back
+            </button>
 
-            <form className="authForm" onSubmit={handleAuthSubmit}>
-              {authMode === 'register' && (
+            <div className={authMode === 'register' ? 'authPanel signupPanel' : 'authPanel'}>
+              <div className="authBrandBlock">
+                {authMode === 'register' ? (
+                  <>
+                    <p className="authKicker">Clinic AI Copilot</p>
+                    <h1 id="auth-title">Create account</h1>
+                    <p>Create a secure provider account</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="authKicker">Clinic AI Copilot</p>
+                    <h1 id="auth-title">Welcome Back</h1>
+                    <p>Secure access to patient records.</p>
+                  </>
+                )}
+              </div>
+
+              <form className="authForm" onSubmit={handleAuthSubmit}>
+                {authMode === 'register' && (
+                  <label>
+                    Full name
+                    <input
+                      name="name"
+                      value={authForm.name}
+                      onChange={handleAuthChange}
+                      placeholder="Dr. Jane Doe"
+                      required
+                    />
+                  </label>
+                )}
                 <label>
-                  Name
+                  {authMode === 'register' ? 'Work email' : 'Email address'}
                   <input
-                    name="name"
-                    value={authForm.name}
+                    name="email"
+                    value={authForm.email}
                     onChange={handleAuthChange}
-                    placeholder="Doctor name"
+                    placeholder={
+                      authMode === 'register' ? 'jane.doe@clinic.org' : 'provider@clinic.edu'
+                    }
                     required
+                    type="email"
                   />
                 </label>
-              )}
-              <label>
-                Email
-                <input
-                  name="email"
-                  value={authForm.email}
-                  onChange={handleAuthChange}
-                  placeholder="doctor@clinic.com"
-                  required
-                  type="email"
-                />
-              </label>
-              <label>
-                Password
-                <input
-                  name="password"
-                  value={authForm.password}
-                  onChange={handleAuthChange}
-                  placeholder="At least 8 characters"
-                  required
-                  type="password"
-                />
-              </label>
+                <label>
+                  Password
+                  <input
+                    name="password"
+                    value={authForm.password}
+                    onChange={handleAuthChange}
+                    placeholder="At least 8 characters"
+                    required
+                    type="password"
+                  />
+                </label>
 
-              {authError && <p className="formMessage error">{authError}</p>}
+                {authError && <p className="formMessage error">{authError}</p>}
 
-              <button className="primaryButton" disabled={authStatus === 'Saving'} type="submit">
-                {authStatus === 'Saving'
-                  ? 'Please wait...'
-                  : authMode === 'register'
-                    ? 'Create account'
-                    : 'Sign in'}
-              </button>
-            </form>
+                <button className="primaryButton" disabled={authStatus === 'Saving'} type="submit">
+                  {authStatus === 'Saving'
+                    ? 'Please wait...'
+                    : authMode === 'register'
+                      ? 'Create account'
+                      : 'Sign in'}
+                </button>
+              </form>
+
+              <div className="authSecureLine">
+                <span>Secure session</span>
+              </div>
+
+              <p className="authSwitch">
+                {authMode === 'register' ? 'Already have an account? ' : "Don't have an account? "}
+                <button
+                  type="button"
+                  onClick={() => switchAuthMode(authMode === 'register' ? 'login' : 'register')}
+                >
+                  {authMode === 'register' ? 'Log in' : 'Request access'}
+                </button>
+              </p>
+            </div>
           </section>
-        </section>
+        )}
       </main>
     );
   }

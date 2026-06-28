@@ -86,7 +86,9 @@ Then open:
 http://localhost:3000
 ```
 
-The Vite dev server proxies `/api` requests to the Express API on port 3001.
+The frontend calls the Express API on `http://localhost:3001` by default. Keep
+`yarn api:dev` running while using the web app. To point the frontend at a
+different API host, set `VITE_API_BASE_URL`.
 
 ## Environment Variables
 
@@ -99,6 +101,13 @@ After configuring `MONGO_URL`, seed shared development patients with:
 
 ```bash
 yarn api:seed
+```
+
+The seed command also creates the demo doctor account:
+
+```text
+doctor@clinikit.local
+clinic-demo-2026
 ```
 
 ## Development Conventions
