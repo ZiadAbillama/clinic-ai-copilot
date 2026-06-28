@@ -539,13 +539,16 @@ export default function App() {
             height={104}
           />
         </a>
-
-        <nav className="topNav" aria-label="Main section">
-          <a href="#patients">Patients</a>
-        </nav>
       </header>
 
       <section className="overview" id="top" aria-labelledby="overview-title">
+        <img
+          className="heroBackground"
+          src="/brand/clinikit-hero-background.webp"
+          alt=""
+          aria-hidden="true"
+        />
+
         <div className="overviewCopy">
           <p className="eyebrow">Doctor workspace</p>
           <h1 id="overview-title">Clinic AI Copilot</h1>
@@ -568,14 +571,9 @@ export default function App() {
           <div className="panelHeader">
             <div>
               <p className="eyebrow">Records</p>
-              <h2>Patients</h2>
+              <h2>Patients{patientsState === 'Loaded' ? ` (${patients.length})` : ''}</h2>
             </div>
             <div className="panelActions">
-              <span>
-                {patientsState === 'Loaded'
-                  ? `${patients.length} patients · ${appointments.length} visits`
-                  : patientsState}
-              </span>
               <button type="button" onClick={startNewPatient}>
                 <Plus size={16} />
                 Add patient
@@ -612,7 +610,6 @@ export default function App() {
                     <strong>{patient.name}</strong>
                     <span>{patient.contact}</span>
                   </div>
-                  <em>{patient.lastVisit}</em>
                 </button>
 
                 {manageMode && (
