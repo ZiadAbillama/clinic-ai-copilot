@@ -13,6 +13,12 @@
   --section: #f5fbfe;
   --white: #ffffff;
   --shadow: 0 20px 58px rgba(2, 5, 27, 0.14);
+  --patient-columns: minmax(210px, 1.35fr) minmax(118px, 0.8fr) minmax(132px, 0.9fr)
+    minmax(100px, 0.75fr) minmax(58px, 0.45fr) minmax(106px, 0.72fr) minmax(110px, 0.7fr);
+  --visit-columns: minmax(150px, 0.9fr) minmax(220px, 1.4fr) minmax(110px, 0.7fr)
+    minmax(120px, 0.75fr) minmax(90px, 0.55fr);
+  --timeline-columns: minmax(140px, 0.85fr) minmax(110px, 0.7fr) minmax(260px, 1.5fr)
+    minmax(120px, 0.75fr) minmax(132px, 0.75fr);
 }
 
 * {
@@ -365,8 +371,8 @@ h3 {
 
 .workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.48fr);
-  gap: clamp(24px, 4vw, 42px);
+  grid-template-columns: minmax(0, 1fr);
+  gap: 24px;
   padding: clamp(56px, 8vw, 96px) clamp(18px, 5vw, 72px) clamp(72px, 8vw, 112px);
 }
 
@@ -375,8 +381,8 @@ h3 {
 .formCard {
   background: var(--white);
   border: 1px solid var(--line);
-  border-radius: 12px;
-  box-shadow: var(--shadow);
+  border-radius: 4px;
+  box-shadow: none;
 }
 
 .patientPanel {
@@ -387,8 +393,8 @@ h3 {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 16px;
-  padding: 24px;
+  gap: 18px;
+  padding: 22px 24px;
   border-bottom: 1px solid var(--line);
 }
 
@@ -405,6 +411,32 @@ h3 {
   gap: 8px;
   align-items: center;
   justify-content: flex-end;
+}
+
+.patientSearch {
+  display: grid;
+  gap: 6px;
+}
+
+.patientSearch span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+
+.patientSearch input {
+  width: min(280px, 34vw);
+  min-height: 38px;
+  padding: 0 12px;
+  color: var(--ink);
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .panelActions button,
@@ -451,6 +483,22 @@ h3 {
 
 .patientList {
   display: grid;
+  overflow-x: auto;
+}
+
+.patientTableHeader {
+  display: grid;
+  grid-template-columns: var(--patient-columns);
+  gap: 14px;
+  align-items: center;
+  min-width: 920px;
+  padding: 12px 24px;
+  color: #44474c;
+  background: #e7ecf6;
+  border-bottom: 1px solid var(--line);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
 }
 
 .patientMessage {
@@ -468,8 +516,10 @@ h3 {
 
 .patientRow {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: var(--patient-columns);
+  gap: 14px;
   align-items: center;
+  min-width: 920px;
   width: 100%;
   color: inherit;
   text-align: left;
@@ -483,21 +533,24 @@ h3 {
 
 .patientRow:hover,
 .patientRow.selected {
-  background: var(--cyan-faint);
+  background: #fbfdff;
 }
 
 .patientRow.selected {
-  box-shadow: inset 4px 0 0 var(--cyan);
+  box-shadow: inset 3px 0 0 var(--cyan);
 }
 
 .patientSelect {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-column: 1 / 7;
+  grid-template-columns:
+    minmax(210px, 1.35fr) minmax(118px, 0.8fr) minmax(132px, 0.9fr) minmax(100px, 0.75fr)
+    minmax(58px, 0.45fr) minmax(106px, 0.72fr);
   gap: 14px;
   align-items: center;
   width: 100%;
-  min-height: 86px;
-  padding: 16px 24px;
+  min-height: 64px;
+  padding: 12px 0 12px 24px;
   color: inherit;
   text-align: left;
   background: transparent;
@@ -505,33 +558,78 @@ h3 {
 }
 
 .patientRow strong,
-.patientRow span {
+.patientRow span,
+.patientRow small {
   display: block;
 }
 
 .patientRow strong {
   color: var(--ink);
-  font-size: 18px;
+  font-size: 13px;
 }
 
 .patientRow span {
-  margin-top: 4px;
   color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.patientRow small {
+  margin-top: 4px;
+  color: #828894;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+}
+
+.patientIdentity {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+}
+
+.patientAvatar {
+  display: inline-grid !important;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  color: var(--white) !important;
+  background: var(--ink-soft);
+  border-radius: 999px;
+  font-size: 11px !important;
+  font-weight: 900;
+}
+
+.statusPill {
+  display: inline-flex !important;
+  justify-self: start;
+  width: fit-content;
+  padding: 4px 8px;
+  color: #0a5c36 !important;
+  background: #dcfce7;
+  border: 1px solid #bbf7d0;
+  border-radius: 999px;
+  font-size: 10px !important;
+  font-weight: 800;
 }
 
 .patientRowActions {
   display: flex;
   gap: 8px;
-  padding-right: 16px;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 24px;
 }
 
 .patientRowActions button {
-  min-height: 38px;
+  min-height: 34px;
   padding: 0 10px;
   background: var(--white);
+  font-size: 12px;
 }
 
-.patientRowActions button:last-child {
+.patientRowActions .deleteRowButton {
   color: #9f1239;
   border-color: #fecdd3;
 }
@@ -540,7 +638,7 @@ h3 {
   border-color: var(--cyan);
 }
 
-.patientRowActions button:last-child:hover {
+.patientRowActions .deleteRowButton:hover {
   background: #fff1f2;
   border-color: #fb7185;
 }
@@ -554,6 +652,17 @@ h3 {
 .detailCard,
 .formCard {
   padding: 24px;
+}
+
+.detailCard {
+  position: static;
+}
+
+.detailHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
 }
 
 .formHeader {
@@ -574,7 +683,7 @@ h3 {
   place-items: center;
   width: 42px;
   height: 42px;
-  margin-bottom: 18px;
+  margin-bottom: 0;
   color: var(--cyan);
   background: var(--cyan-faint);
   border: 1px solid var(--line);
@@ -599,11 +708,12 @@ h3 {
 }
 
 .detailGrid div {
-  min-height: 78px;
-  padding: 14px;
-  background: var(--cyan-faint);
+  min-height: 66px;
+  padding: 12px 0;
+  background: transparent;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-width: 0 0 1px;
+  border-radius: 0;
 }
 
 .detailGrid dt {
@@ -658,19 +768,44 @@ h3 {
 
 .visitList {
   display: grid;
-  gap: 10px;
   margin: 16px 0 0;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
+.visitTableHeader,
+.timelineTableHeader {
+  display: grid;
+  gap: 14px;
+  align-items: center;
+  min-width: 760px;
+  padding: 10px 14px;
+  color: #44474c;
+  background: #e7ecf6;
+  border-bottom: 1px solid var(--line);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.visitTableHeader {
+  grid-template-columns: var(--visit-columns);
 }
 
 .visitRow {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
+  grid-template-columns: var(--visit-columns);
+  gap: 14px;
   align-items: center;
-  padding: 12px;
-  background: var(--cyan-faint);
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  min-width: 760px;
+  padding: 12px 14px;
+  background: var(--white);
+  border-bottom: 1px solid var(--line);
+}
+
+.visitRow:last-child {
+  border-bottom: 0;
 }
 
 .visitRow time,
@@ -687,14 +822,12 @@ h3 {
 }
 
 .visitRow strong {
-  margin-top: 4px;
   color: var(--ink);
   font-weight: 900;
   overflow-wrap: anywhere;
 }
 
 .visitRow span {
-  margin-top: 4px;
   color: var(--ink-soft);
   font-size: 12px;
   font-weight: 800;
@@ -708,30 +841,29 @@ h3 {
 
 .timelineList {
   display: grid;
-  gap: 10px;
   margin: 16px 0 0;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
+.timelineTableHeader {
+  grid-template-columns: var(--timeline-columns);
 }
 
 .timelineItem {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 12px;
-  align-items: start;
-  padding: 12px;
-  background: var(--cyan-faint);
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  grid-template-columns: var(--timeline-columns);
+  gap: 14px;
+  align-items: center;
+  min-width: 760px;
+  padding: 12px 14px;
+  background: var(--white);
+  border-bottom: 1px solid var(--line);
 }
 
-.timelineIcon {
-  display: inline-grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  color: var(--cyan);
-  background: var(--white);
-  border: 1px solid var(--line);
-  border-radius: 8px;
+.timelineItem:last-child {
+  border-bottom: 0;
 }
 
 .timelineItem time,
@@ -749,7 +881,6 @@ h3 {
 }
 
 .timelineItem strong {
-  margin-top: 4px;
   color: var(--ink);
   font-weight: 900;
   overflow-wrap: anywhere;
@@ -757,7 +888,6 @@ h3 {
 
 .timelineItem span,
 .timelineItem p {
-  margin-top: 4px;
   color: var(--ink-soft);
   font-size: 13px;
   font-weight: 800;
@@ -768,6 +898,14 @@ h3 {
 .timelineActions {
   display: flex;
   gap: 8px;
+  justify-content: flex-end;
+}
+
+.timelineType {
+  display: inline-flex !important;
+  gap: 6px;
+  align-items: center;
+  color: var(--ink-soft);
 }
 
 .timelineActions button {
@@ -887,9 +1025,12 @@ h3 {
 }
 
 @media (max-width: 980px) {
-  .overview,
   .workspace {
     grid-template-columns: 1fr;
+  }
+
+  .detailCard {
+    position: static;
   }
 }
 
@@ -923,32 +1064,29 @@ h3 {
 
   .panelHeader {
     align-items: flex-start;
+    flex-direction: column;
     gap: 12px;
     padding: 20px;
   }
 
   .panelActions {
-    max-width: 64%;
-    justify-content: flex-end;
+    width: 100%;
+    max-width: none;
+    justify-content: flex-start;
+  }
+
+  .patientSearch {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+
+  .patientSearch input {
+    width: 100%;
   }
 
   .panelActions button {
     min-height: 40px;
     padding: 0 12px;
-  }
-
-  .patientRow {
-    grid-template-columns: 1fr;
-  }
-
-  .patientSelect {
-    grid-template-columns: minmax(0, 1fr);
-    min-height: 74px;
-    padding: 14px 20px;
-  }
-
-  .patientRowActions {
-    padding: 0 16px 16px 86px;
   }
 
   .patientForm,
@@ -988,11 +1126,6 @@ h3 {
 
   .panelActions button {
     flex: 1 1 140px;
-  }
-
-  .patientSelect {
-    grid-template-columns: 1fr;
-    gap: 12px;
   }
 }
 

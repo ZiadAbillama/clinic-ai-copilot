@@ -66,6 +66,7 @@ export default function App() {
   const [noteFormStatus, setNoteFormStatus] = useState('Idle');
   const [noteFormError, setNoteFormError] = useState('');
   const [editingNoteId, setEditingNoteId] = useState('');
+  const [patientSearch, setPatientSearch] = useState('');
 
   const refreshWorkspace = useCallback((preferredPatientId) => {
     setPatientsState('Loading');
@@ -605,6 +606,15 @@ export default function App() {
     (appointment) => appointment.patientId === selectedPatientId,
   );
   const appointmentFormOpen = appointmentFormMode !== 'closed';
+  const filteredPatients = patients.filter((patient) => {
+    const search = patientSearch.trim().toLowerCase();
+    if (!search) return true;
+
+    return [patient.name, patient.id, patient.contact, patient.status, patient.reason]
+      .join(' ')
+      .toLowerCase()
+      .includes(search);
+  });
 
   return (
     <main className="appShell">
@@ -714,6 +724,15 @@ export default function App() {
               <h2>Patients{patientsState === 'Loaded' ? ` (${patients.length})` : ''}</h2>
             </div>
             <div className="panelActions">
+              <label className="patientSearch">
+                <span>Search patients</span>
+                <input
+                  value={patientSearch}
+                  onChange={(event) => setPatientSearch(event.target.value)}
+                  placeholder="Search patients..."
+                  type="search"
+                />
+              </label>
               <button type="button" onClick={startNewPatient}>
                 <Plus size={16} />
                 Add patient
@@ -726,6 +745,16 @@ export default function App() {
           </div>
 
           <div className="patientList">
+            <div className="patientTableHeader" aria-hidden="true">
+              <span>Patient name</span>
+              <span>DOB / age</span>
+              <span>Contact</span>
+              <span>Last visit</span>
+              <span>Notes</span>
+              <span>Status</span>
+              <span>Actions</span>
+            </div>
+
             {patientsState === 'Loading' && <p className="patientMessage">Loading patients...</p>}
 
             {patientsError && <p className="patientMessage error">{patientsError}</p>}
@@ -735,7 +764,11 @@ export default function App() {
               <p className="patientMessage">No patients found.</p>
             )}
 
-            {patients.map((patient) => (
+            {patientsState === 'Loaded' && patients.length > 0 && filteredPatients.length === 0 && (
+              <p className="patientMessage">No patients match that search.</p>
+            )}
+
+            {filteredPatients.map((patient) => (
               <article
                 className={patient.id === selectedPatientId ? 'patientRow selected' : 'patientRow'}
                 key={patient.id}
@@ -746,24 +779,53 @@ export default function App() {
                   aria-pressed={patient.id === selectedPatientId}
                   onClick={() => selectPatient(patient.id)}
                 >
-                  <div>
-                    <strong>{patient.name}</strong>
-                    <span>{patient.contact}</span>
+                  <div className="patientIdentity">
+                    <span className="patientAvatar" aria-hidden="true">
+                      {patient.name
+                        .split(' ')
+                        .map((part) => part[0])
+                        .join('')
+                        .slice(0, 2)}
+                    </span>
+                    <span>
+                      <strong>{patient.name}</strong>
+                      <small>ID: {patient.id}</small>
+                    </span>
                   </div>
+                  <div>
+                    <span>{patient.dob || 'Not set'}</span>
+                    <small>
+                      {patient.lastVisit === 'New patient' ? 'New patient' : 'Patient file'}
+                    </small>
+                  </div>
+                  <span>{patient.contact || 'No contact'}</span>
+                  <span>{patient.lastVisit || 'None'}</span>
+                  <span>{patient.noteCount}</span>
+                  <span className="statusPill">{patient.status || 'Scheduled'}</span>
                 </button>
 
-                {manageMode && (
-                  <div className="patientRowActions" aria-label={`Manage ${patient.name}`}>
-                    <button type="button" onClick={() => startEditingPatient(patient)}>
-                      <Pencil size={16} />
-                      <span>Modify</span>
+                <div className="patientRowActions" aria-label={`Manage ${patient.name}`}>
+                  {manageMode ? (
+                    <>
+                      <button type="button" onClick={() => startEditingPatient(patient)}>
+                        <Pencil size={16} />
+                        <span>Modify</span>
+                      </button>
+                      <button
+                        className="deleteRowButton"
+                        type="button"
+                        onClick={() => handleDeletePatient(patient)}
+                      >
+                        <Trash2 size={16} />
+                        <span>Delete</span>
+                      </button>
+                    </>
+                  ) : (
+                    <button type="button" onClick={() => selectPatient(patient.id)}>
+                      View
                     </button>
-                    <button type="button" onClick={() => handleDeletePatient(patient)}>
-                      <Trash2 size={16} />
-                      <span>Delete</span>
-                    </button>
-                  </div>
-                )}
+                  )}
+                </div>
               </article>
             ))}
           </div>
@@ -799,14 +861,6 @@ export default function App() {
                       <dt>Contact</dt>
                       <dd>{selectedPatient.contact}</dd>
                     </div>
-                    <div>
-                      <dt>Last visit</dt>
-                      <dd>{selectedPatient.lastVisit}</dd>
-                    </div>
-                    <div>
-                      <dt>Notes</dt>
-                      <dd>{selectedPatient.noteCount}</dd>
-                    </div>
                   </dl>
 
                   <div className="recordActions">
@@ -841,6 +895,14 @@ export default function App() {
 
                       {!appointmentFormOpen && (
                         <div className="visitList">
+                          <div className="visitTableHeader" aria-hidden="true">
+                            <span>Date / time</span>
+                            <span>Reason</span>
+                            <span>Type</span>
+                            <span>Status</span>
+                            <span>Actions</span>
+                          </div>
+
                           {selectedPatientVisits.length === 0 && (
                             <p className="detailMessage">No visits found.</p>
                           )}
@@ -858,15 +920,14 @@ export default function App() {
 
                             return (
                               <article className="visitRow" key={visit.id}>
-                                <div>
+                                <div className="visitDateCell">
                                   <time dateTime={visitDateTime}>
                                     {visit.scheduledDate} {visit.scheduledTime}
                                   </time>
-                                  <strong>{visit.reason || 'No reason'}</strong>
-                                  <span>
-                                    {visitCategory} - {visit.status}
-                                  </span>
                                 </div>
+                                <strong>{visit.reason || 'No reason'}</strong>
+                                <span>{visitCategory}</span>
+                                <span className="statusPill">{visit.status}</span>
                                 <button
                                   type="button"
                                   onClick={() => startAppointmentForm('edit', visit.id)}
@@ -1012,28 +1073,42 @@ export default function App() {
 
                       {noteFormMode === 'closed' && timelineState === 'Loaded' && (
                         <div className="timelineList">
+                          <div className="timelineTableHeader" aria-hidden="true">
+                            <span>Date</span>
+                            <span>Type</span>
+                            <span>Summary</span>
+                            <span>Status</span>
+                            <span>Actions</span>
+                          </div>
+
                           {timeline.length === 0 && (
                             <p className="detailMessage">No timeline entries yet.</p>
                           )}
 
                           {timeline.map((item) => (
                             <article className="timelineItem" key={`${item.type}-${item.id}`}>
-                              <div className="timelineIcon">
-                                {item.type === 'note' ? (
-                                  <FileText size={16} />
-                                ) : (
-                                  <HeartPulse size={16} />
-                                )}
-                              </div>
                               <div>
                                 <time dateTime={item.date}>
                                   {item.date?.slice(0, 10)}
                                   {item.time ? ` ${item.time}` : ''}
                                 </time>
+                              </div>
+                              <span className="timelineType">
+                                {item.type === 'note' ? (
+                                  <FileText size={14} />
+                                ) : (
+                                  <HeartPulse size={14} />
+                                )}
+                                {item.type === 'note' ? 'Note' : 'Visit'}
+                              </span>
+                              <div>
                                 <strong>{item.title}</strong>
-                                {item.status && <span>{item.status}</span>}
                                 {item.text && <p>{item.text}</p>}
                               </div>
+                              <span>
+                                {item.status ||
+                                  (item.appointmentId ? 'Visit-linked' : 'Standalone')}
+                              </span>
                               {item.type === 'note' && (
                                 <div className="timelineActions">
                                   <button type="button" onClick={() => startNoteForm('edit', item)}>
