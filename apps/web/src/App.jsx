@@ -14,11 +14,15 @@ const emptyPatientForm = {
   name: '',
   dob: '',
   contact: '',
-  reason: '',
-  appointment: '',
-  status: 'Scheduled',
   lastVisit: '',
   noteCount: 0,
+};
+
+const emptyAppointmentForm = {
+  scheduledDate: '2026-06-28',
+  scheduledTime: '',
+  reason: '',
+  status: 'Scheduled',
 };
 
 export default function App() {
@@ -26,6 +30,9 @@ export default function App() {
   const [patients, setPatients] = useState([]);
   const [patientsState, setPatientsState] = useState('Loading');
   const [patientsError, setPatientsError] = useState('');
+  const [appointments, setAppointments] = useState([]);
+  const [appointmentsState, setAppointmentsState] = useState('Loading');
+  const [appointmentsError, setAppointmentsError] = useState('');
   const [selectedPatientId, setSelectedPatientId] = useState('');
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [selectedPatientState, setSelectedPatientState] = useState('Idle');
@@ -38,27 +45,61 @@ export default function App() {
   const [notice, setNotice] = useState(null);
   const [patientPendingDelete, setPatientPendingDelete] = useState(null);
   const [deleteStatus, setDeleteStatus] = useState('Idle');
+  const [appointmentFormMode, setAppointmentFormMode] = useState('closed');
+  const [appointmentForm, setAppointmentForm] = useState(emptyAppointmentForm);
+  const [appointmentFormStatus, setAppointmentFormStatus] = useState('Idle');
+  const [appointmentFormError, setAppointmentFormError] = useState('');
+  const [visitsOpen, setVisitsOpen] = useState(false);
+  const [editingAppointmentId, setEditingAppointmentId] = useState('');
 
-  const refreshPatients = useCallback((preferredPatientId) => {
+  const refreshWorkspace = useCallback((preferredPatientId) => {
     setPatientsState('Loading');
+    setAppointmentsState('Loading');
 
-    return fetch('/api/patients')
-      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
-      .then((data) => {
-        setPatients(data);
-        setPatientsState('Loaded');
-        setPatientsError('');
-        if (data.length > 0) {
-          setSelectedPatientId((currentId) => preferredPatientId || currentId || data[0].id);
+    const patientsRequest = fetch('/api/patients').then((res) =>
+      res.ok ? res.json() : Promise.reject(res),
+    );
+    const appointmentsRequest = fetch('/api/appointments').then((res) =>
+      res.ok ? res.json() : Promise.reject(res),
+    );
+
+    return Promise.allSettled([patientsRequest, appointmentsRequest]).then(
+      ([patientsResult, appointmentsResult]) => {
+        if (patientsResult.status === 'fulfilled') {
+          setPatients(patientsResult.value);
+          setPatientsState('Loaded');
+          setPatientsError('');
+
+          if (patientsResult.value.length > 0) {
+            setSelectedPatientId(
+              (currentId) => preferredPatientId || currentId || patientsResult.value[0].id,
+            );
+          } else {
+            setSelectedPatientId('');
+            setSelectedPatient(null);
+          }
+        } else {
+          setPatients([]);
+          setPatientsState('Offline');
+          setPatientsError('Patients are unavailable. Start the API and refresh.');
         }
-        return data;
-      })
-      .catch(() => {
-        setPatients([]);
-        setPatientsState('Offline');
-        setPatientsError('Patient data is unavailable. Start the API and refresh.');
-        return [];
-      });
+
+        if (appointmentsResult.status === 'fulfilled') {
+          setAppointments(appointmentsResult.value);
+          setAppointmentsState('Loaded');
+          setAppointmentsError('');
+        } else {
+          setAppointments([]);
+          setAppointmentsState('Offline');
+          setAppointmentsError('Visits are unavailable. Patient records are still shown.');
+        }
+
+        return {
+          patients: patientsResult.status === 'fulfilled' ? patientsResult.value : [],
+          appointments: appointmentsResult.status === 'fulfilled' ? appointmentsResult.value : [],
+        };
+      },
+    );
   }, []);
 
   const setFormFromPatient = useCallback((patient) => {
@@ -66,13 +107,23 @@ export default function App() {
       name: patient.name || '',
       dob: patient.dob || '',
       contact: patient.contact || '',
-      reason: patient.reason || '',
-      appointment: patient.appointment || '',
-      status: patient.status || 'Scheduled',
       lastVisit: patient.lastVisit || '',
       noteCount: patient.noteCount || 0,
     });
   }, []);
+
+  function findAppointment(appointmentId) {
+    return appointments.find((appointment) => appointment.id === appointmentId);
+  }
+
+  function setAppointmentFormFromVisit(appointment) {
+    setAppointmentForm({
+      scheduledDate: appointment?.scheduledDate || '2026-06-28',
+      scheduledTime: appointment?.scheduledTime || '',
+      reason: appointment?.reason || '',
+      status: appointment?.status || 'Scheduled',
+    });
+  }
 
   function handleFormChange(event) {
     const { name, value } = event.target;
@@ -88,6 +139,8 @@ export default function App() {
     setFormError('');
     setFormStatus('Idle');
     setPatientPendingDelete(null);
+    setAppointmentFormMode('closed');
+    setVisitsOpen(false);
   }
 
   function startEditingPatient(patient = selectedPatient) {
@@ -99,12 +152,46 @@ export default function App() {
     setFormError('');
     setFormStatus('Idle');
     setPatientPendingDelete(null);
+    setAppointmentFormMode('closed');
+    setVisitsOpen(false);
   }
 
   function closePatientForm() {
     setFormMode('closed');
     setFormError('');
     setFormStatus('Idle');
+  }
+
+  function startAppointmentForm(mode, appointmentId = '') {
+    if (!selectedPatient) return;
+    const existingAppointment = appointmentId ? findAppointment(appointmentId) : null;
+    setAppointmentFormMode(mode);
+    setAppointmentFormFromVisit(existingAppointment);
+    setEditingAppointmentId(appointmentId);
+    setAppointmentFormError('');
+    setAppointmentFormStatus('Idle');
+    setVisitsOpen(true);
+  }
+
+  function closeAppointmentForm() {
+    setAppointmentFormMode('closed');
+    setAppointmentFormError('');
+    setAppointmentFormStatus('Idle');
+    setEditingAppointmentId('');
+  }
+
+  function selectPatient(patientId) {
+    setSelectedPatientId(patientId);
+    closeAppointmentForm();
+    setVisitsOpen(false);
+  }
+
+  function handleAppointmentFormChange(event) {
+    const { name, value } = event.target;
+    setAppointmentForm((currentForm) => ({
+      ...currentForm,
+      [name]: value,
+    }));
   }
 
   function handlePatientSubmit(event) {
@@ -130,12 +217,13 @@ export default function App() {
         setFormFromPatient(patient);
         setFormStatus('Saved');
         setFormMode('closed');
+        setAppointmentFormMode('closed');
         setNotice({
           tone: 'success',
           title: wasEditing ? 'Patient updated' : 'Patient added',
           text: `${patient.name} is now saved in the patient list.`,
         });
-        return refreshPatients(patient.id);
+        return refreshWorkspace(patient.id);
       })
       .catch(() => {
         setFormStatus('Error');
@@ -161,7 +249,7 @@ export default function App() {
     const patient = patientPendingDelete;
 
     setDeleteStatus('Deleting');
-    setPatientsState('Loading');
+    setAppointmentsState('Loading');
     setFormError('');
 
     fetch(`/api/patients/${encodeURIComponent(patient.id)}`, {
@@ -173,6 +261,8 @@ export default function App() {
           setSelectedPatient(null);
           setSelectedPatientId('');
           closePatientForm();
+          closeAppointmentForm();
+          setVisitsOpen(false);
         }
         setNotice({
           tone: 'success',
@@ -181,11 +271,51 @@ export default function App() {
         });
         setPatientPendingDelete(null);
         setDeleteStatus('Idle');
-        return refreshPatients();
+        return refreshWorkspace();
       })
       .catch(() => {
-        setPatientsState('Loaded');
+        setAppointmentsState('Loaded');
         setDeleteStatus('Error');
+      });
+  }
+
+  function handleAppointmentSubmit(event) {
+    event.preventDefault();
+    if (!selectedPatientId) return;
+
+    const existingAppointment = editingAppointmentId ? findAppointment(editingAppointmentId) : null;
+    const isEditing = appointmentFormMode === 'edit' && existingAppointment;
+    const url = isEditing
+      ? `/api/appointments/${encodeURIComponent(existingAppointment.id)}`
+      : '/api/appointments';
+
+    setAppointmentFormStatus('Saving');
+    setAppointmentFormError('');
+
+    fetch(url, {
+      method: isEditing ? 'PATCH' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...appointmentForm,
+        patientId: selectedPatientId,
+      }),
+    })
+      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
+      .then((appointment) => {
+        setAppointmentFormStatus('Saved');
+        setAppointmentFormMode('closed');
+        setEditingAppointmentId('');
+        setVisitsOpen(true);
+        setNotice({
+          tone: 'success',
+          title: isEditing ? 'Visit updated' : 'Visit scheduled',
+          text: `${appointment.patient.name} is set for ${appointment.scheduledTime || appointment.scheduledDate}.`,
+        });
+        return refreshWorkspace(selectedPatientId);
+      })
+      .catch(() => {
+        setAppointmentFormStatus('Error');
+        setAppointmentFormError('Could not save visit. Check the API and try again.');
       });
   }
 
@@ -206,8 +336,8 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    refreshPatients();
-  }, [refreshPatients]);
+    refreshWorkspace();
+  }, [refreshWorkspace]);
 
   useEffect(() => {
     if (!selectedPatientId) return undefined;
@@ -258,6 +388,11 @@ export default function App() {
       state: patientsState,
       icon: patientsState === 'Loaded' ? CheckCircle2 : CircleDashed,
     },
+    {
+      label: 'Visits API',
+      state: appointmentsState,
+      icon: appointmentsState === 'Loaded' ? CheckCircle2 : CircleDashed,
+    },
   ];
 
   const patientFormSection = (
@@ -299,35 +434,6 @@ export default function App() {
           />
         </label>
         <label>
-          Appointment
-          <input
-            name="appointment"
-            value={patientForm.appointment}
-            onChange={handleFormChange}
-            type="time"
-          />
-        </label>
-        <label className="wideField">
-          Visit reason
-          <input
-            name="reason"
-            value={patientForm.reason}
-            onChange={handleFormChange}
-            placeholder="Reason for visit"
-          />
-        </label>
-        <label>
-          Status
-          <select name="status" value={patientForm.status} onChange={handleFormChange}>
-            <option>Scheduled</option>
-            <option>Checked in</option>
-            <option>Needs vitals</option>
-            <option>Doctor review</option>
-            <option>Completed</option>
-            <option>Cancelled</option>
-          </select>
-        </label>
-        <label>
           Last visit
           <input
             name="lastVisit"
@@ -346,7 +452,6 @@ export default function App() {
             type="number"
           />
         </label>
-
         {formError && <p className="formMessage error">{formError}</p>}
 
         <button className="primaryButton" disabled={formStatus === 'Saving'} type="submit">
@@ -355,6 +460,11 @@ export default function App() {
       </form>
     </section>
   );
+
+  const selectedPatientVisits = appointments.filter(
+    (appointment) => appointment.patientId === selectedPatientId,
+  );
+  const appointmentFormOpen = appointmentFormMode !== 'closed';
 
   return (
     <main className="appShell">
@@ -439,9 +549,7 @@ export default function App() {
         <div className="overviewCopy">
           <p className="eyebrow">Doctor workspace</p>
           <h1 id="overview-title">Clinic AI Copilot</h1>
-          <p>
-            A simplified medical workspace for a doctor to review patients, notes, and AI summaries.
-          </p>
+          <p>Review today&apos;s visits and update patient records.</p>
         </div>
 
         <div className="statusPanel" aria-label="System status">
@@ -459,12 +567,14 @@ export default function App() {
         <div className="patientPanel" id="patients">
           <div className="panelHeader">
             <div>
-              <p className="eyebrow">Patients</p>
-              <h2>Today</h2>
+              <p className="eyebrow">Records</p>
+              <h2>Patients</h2>
             </div>
             <div className="panelActions">
               <span>
-                {patientsState === 'Loaded' ? `${patients.length} active` : patientsState}
+                {patientsState === 'Loaded'
+                  ? `${patients.length} patients · ${appointments.length} visits`
+                  : patientsState}
               </span>
               <button type="button" onClick={startNewPatient}>
                 <Plus size={16} />
@@ -481,9 +591,10 @@ export default function App() {
             {patientsState === 'Loading' && <p className="patientMessage">Loading patients...</p>}
 
             {patientsError && <p className="patientMessage error">{patientsError}</p>}
+            {appointmentsError && <p className="patientMessage error">{appointmentsError}</p>}
 
             {patientsState === 'Loaded' && patients.length === 0 && (
-              <p className="patientMessage">No patients scheduled for today.</p>
+              <p className="patientMessage">No patients found.</p>
             )}
 
             {patients.map((patient) => (
@@ -495,14 +606,13 @@ export default function App() {
                   className="patientSelect"
                   type="button"
                   aria-pressed={patient.id === selectedPatientId}
-                  onClick={() => setSelectedPatientId(patient.id)}
+                  onClick={() => selectPatient(patient.id)}
                 >
-                  <time>{patient.appointment}</time>
                   <div>
                     <strong>{patient.name}</strong>
-                    <span>{patient.reason}</span>
+                    <span>{patient.contact}</span>
                   </div>
-                  <em>{patient.status}</em>
+                  <em>{patient.lastVisit}</em>
                 </button>
 
                 {manageMode && (
@@ -542,24 +652,152 @@ export default function App() {
               )}
 
               {selectedPatientState === 'Loaded' && selectedPatient && (
-                <dl className="detailGrid">
-                  <div>
-                    <dt>Date of birth</dt>
-                    <dd>{selectedPatient.dob}</dd>
+                <>
+                  <dl className="detailGrid">
+                    <div>
+                      <dt>Date of birth</dt>
+                      <dd>{selectedPatient.dob}</dd>
+                    </div>
+                    <div>
+                      <dt>Contact</dt>
+                      <dd>{selectedPatient.contact}</dd>
+                    </div>
+                    <div>
+                      <dt>Last visit</dt>
+                      <dd>{selectedPatient.lastVisit}</dd>
+                    </div>
+                    <div>
+                      <dt>Notes</dt>
+                      <dd>{selectedPatient.noteCount}</dd>
+                    </div>
+                  </dl>
+
+                  <div className="recordActions">
+                    <button type="button" onClick={() => setVisitsOpen((current) => !current)}>
+                      {visitsOpen ? 'Hide visits' : `View visits (${selectedPatientVisits.length})`}
+                    </button>
                   </div>
-                  <div>
-                    <dt>Contact</dt>
-                    <dd>{selectedPatient.contact}</dd>
-                  </div>
-                  <div>
-                    <dt>Last visit</dt>
-                    <dd>{selectedPatient.lastVisit}</dd>
-                  </div>
-                  <div>
-                    <dt>Notes</dt>
-                    <dd>{selectedPatient.noteCount}</dd>
-                  </div>
-                </dl>
+
+                  {visitsOpen && (
+                    <section className="visitPanel" aria-labelledby="visit-panel-title">
+                      <div className="visitPanelHeader">
+                        <div>
+                          <p className="eyebrow">Visits</p>
+                          <h3 id="visit-panel-title">Patient visits</h3>
+                        </div>
+                        {!appointmentFormOpen && (
+                          <button type="button" onClick={() => startAppointmentForm('create')}>
+                            Schedule visit
+                          </button>
+                        )}
+                      </div>
+
+                      {!appointmentFormOpen && (
+                        <div className="visitList">
+                          {selectedPatientVisits.length === 0 && (
+                            <p className="detailMessage">No visits found.</p>
+                          )}
+
+                          {selectedPatientVisits.map((visit) => {
+                            const visitCategory =
+                              visit.status === 'Completed' ||
+                              visit.status === 'Cancelled' ||
+                              visit.scheduledDate < '2026-06-28'
+                                ? 'Previous'
+                                : 'Scheduled';
+                            const visitDateTime = visit.scheduledTime
+                              ? `${visit.scheduledDate}T${visit.scheduledTime}`
+                              : visit.scheduledDate;
+
+                            return (
+                              <article className="visitRow" key={visit.id}>
+                                <div>
+                                  <time dateTime={visitDateTime}>
+                                    {visit.scheduledDate} {visit.scheduledTime}
+                                  </time>
+                                  <strong>{visit.reason || 'No reason'}</strong>
+                                  <span>
+                                    {visitCategory} - {visit.status}
+                                  </span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => startAppointmentForm('edit', visit.id)}
+                                >
+                                  Edit
+                                </button>
+                              </article>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {appointmentFormOpen && (
+                        <form className="visitForm" onSubmit={handleAppointmentSubmit}>
+                          <label>
+                            Date
+                            <input
+                              name="scheduledDate"
+                              type="date"
+                              value={appointmentForm.scheduledDate}
+                              onChange={handleAppointmentFormChange}
+                            />
+                          </label>
+                          <label>
+                            Time
+                            <input
+                              name="scheduledTime"
+                              type="time"
+                              value={appointmentForm.scheduledTime}
+                              onChange={handleAppointmentFormChange}
+                            />
+                          </label>
+                          <label>
+                            Status
+                            <select
+                              name="status"
+                              value={appointmentForm.status}
+                              onChange={handleAppointmentFormChange}
+                            >
+                              <option>Scheduled</option>
+                              <option>Checked in</option>
+                              <option>Needs vitals</option>
+                              <option>Doctor review</option>
+                              <option>Completed</option>
+                              <option>Cancelled</option>
+                            </select>
+                          </label>
+                          <label className="wideField">
+                            Reason
+                            <input
+                              name="reason"
+                              value={appointmentForm.reason}
+                              onChange={handleAppointmentFormChange}
+                              placeholder="Visit reason"
+                            />
+                          </label>
+
+                          {appointmentFormError && (
+                            <p className="formMessage error">{appointmentFormError}</p>
+                          )}
+
+                          <div className="formActions">
+                            <button type="button" onClick={closeAppointmentForm}>
+                              Cancel
+                            </button>
+                            <button
+                              className="primaryButton"
+                              disabled={appointmentFormStatus === 'Saving'}
+                              type="submit"
+                            >
+                              {appointmentFormStatus === 'Saving' ? 'Saving...' : 'Save visit'}
+                            </button>
+                          </div>
+                        </form>
+                      )}
+                    </section>
+                  )}
+                </>
               )}
             </section>
           )}

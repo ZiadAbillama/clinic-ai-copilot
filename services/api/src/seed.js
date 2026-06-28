@@ -1,7 +1,8 @@
 import './env.js';
 import { DEMO_DOCTOR_ID } from './config.js';
-import { seedPatients } from './data.js';
+import { seedAppointments, seedPatients } from './data.js';
 import { connectDatabase, disconnectDatabase } from './db.js';
+import { Appointment } from './models/Appointment.js';
 import { Patient } from './models/Patient.js';
 
 async function seed() {
@@ -15,7 +16,16 @@ async function seed() {
     );
   }
 
+  for (const appointment of seedAppointments) {
+    await Appointment.updateOne(
+      { doctorId: DEMO_DOCTOR_ID, id: appointment.id },
+      { $set: { ...appointment, doctorId: DEMO_DOCTOR_ID } },
+      { upsert: true },
+    );
+  }
+
   console.log(`Seeded ${seedPatients.length} patients for doctor ${DEMO_DOCTOR_ID}.`);
+  console.log(`Seeded ${seedAppointments.length} appointments for doctor ${DEMO_DOCTOR_ID}.`);
 }
 
 seed()

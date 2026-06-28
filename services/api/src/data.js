@@ -46,3 +46,12 @@ export const seedPatients = [
     noteCount: 1,
   },
 ];
+
+export const seedAppointments = seedPatients.map((patient) => ({
+  id: `A-${patient.id}`,
+  patientId: patient.id,
+  scheduledDate: '2026-06-28',
+  scheduledTime: patient.appointment,
+  reason: patient.reason,
+  status: patient.status,
+}));

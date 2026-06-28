@@ -38,7 +38,7 @@ approves or rejects → everything appears on the patient timeline.
 | --- | --------------------- | -------------------------------------------------------------- | ------ |
 | 1   | Doctor dashboard      | Home: this doctor's patients, today's visits, AI/system status | 🟡     |
 | 2   | Patient management    | List / open / create / edit patients                           | 🟡     |
-| 3   | Appointments (visits) | Start now or schedule; status set below                        | ⬜     |
+| 3   | Appointments (visits) | Today's visit list, backed by MongoDB                          | 🟡     |
 | 4   | Medical notes         | Attached to a visit **or standalone** on a patient             | ⬜     |
 | 5   | Patient timeline      | Merged visits + notes, newest-first                            | ⬜     |
 | 6   | AI summarization      | Local Ollama drafts a note summary                             | ⬜     |
@@ -49,13 +49,14 @@ approves or rejects → everything appears on the patient timeline.
 
 ### Feature detail notes
 
-- **Dashboard (🟡):** UI shell + live `/api/health` status done; patient list now
-  loads through `/api/patients`.
-- **Patient management (🟡):** read-only mock list/get endpoints exist and the
-  dashboard consumes the list and detail endpoints; create/edit and persistence are
-  not built.
-- **Database (🟡):** Mongoose connection and Patient model exist; the API reads
-  patients from MongoDB Atlas. Other models are not built yet.
+- **Dashboard (🟡):** UI shell + live `/api/health` status done; today's visit list
+  now loads through `/api/appointments`.
+- **Patient management (🟡):** list/get/create/edit/delete exists for the demo
+  doctor, backed by MongoDB Atlas.
+- **Appointments (🟡):** Appointment model, today's visit list, and basic
+  schedule/edit controls exist. Visit history is not built yet.
+- **Database (🟡):** Mongoose connection, Patient model, and Appointment model
+  exist. Notes, summaries, users, and audit logs are not built yet.
 - **Visit statuses:** `Scheduled` → `In progress` → `Completed` → `Cancelled`.
   "Start now" creates the visit directly as `In progress`; "Schedule" creates it as
   `Scheduled`.
@@ -88,11 +89,13 @@ Current (✅):
 - `POST /api/patients` — create a patient for the demo doctor
 - `PATCH /api/patients/:id` — update a patient for the demo doctor
 - `DELETE /api/patients/:id` — remove a patient for the demo doctor
+- `GET /api/appointments` — today's visits with patient data from MongoDB Atlas
+- `POST /api/appointments` — create a visit for a patient
+- `PATCH /api/appointments/:id` — update a visit
 
 Planned (⬜, all JWT-protected and doctor-scoped):
 
 - `POST /api/auth/register`, `POST /api/auth/login`
-- `GET/POST/PATCH /api/appointments` (visits)
 - `GET/POST/PATCH /api/notes` (visit-linked or standalone)
 - `GET /api/patients/:id/timeline`
 - `POST /api/notes/:id/summarize` (Ollama) and `PATCH /api/summaries/:id` (approve/reject)
@@ -120,4 +123,5 @@ Planned (⬜, all JWT-protected and doctor-scoped):
 - Patient data uses MongoDB Atlas, seeded from starter data.
 - Patient create/edit/delete exists, but richer validation and duplicate handling are still basic.
 - No auth; the API is unscoped and public.
-- No appointments, notes, timeline, AI, search, or audit log persistence yet.
+- Appointment persistence and basic scheduling/editing exist; visit history is not built yet.
+- No notes, timeline, AI, search, or audit log persistence yet.
