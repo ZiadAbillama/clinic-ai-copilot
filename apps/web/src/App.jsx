@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   AlertTriangle,
   CheckCircle2,
-  CircleDashed,
   FileText,
   HeartPulse,
   Pencil,
@@ -32,12 +31,11 @@ const emptyNoteForm = {
 };
 
 export default function App() {
-  const [apiState, setApiState] = useState('Checking');
   const [patients, setPatients] = useState([]);
   const [patientsState, setPatientsState] = useState('Loading');
   const [patientsError, setPatientsError] = useState('');
   const [appointments, setAppointments] = useState([]);
-  const [appointmentsState, setAppointmentsState] = useState('Loading');
+  const [, setAppointmentsState] = useState('Loading');
   const [appointmentsError, setAppointmentsError] = useState('');
   const [selectedPatientId, setSelectedPatientId] = useState('');
   const [selectedPatient, setSelectedPatient] = useState(null);
@@ -461,22 +459,6 @@ export default function App() {
   }
 
   useEffect(() => {
-    let active = true;
-
-    fetch('/api/health')
-      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
-      .then((data) => {
-        if (active) setApiState(data.status === 'ok' ? 'Ready' : 'Degraded');
-      })
-      .catch(() => {
-        if (active) setApiState('Offline');
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  useEffect(() => {
     refreshWorkspace();
   }, [refreshWorkspace]);
 
@@ -516,25 +498,6 @@ export default function App() {
 
     return () => window.clearTimeout(timeoutId);
   }, [notice]);
-
-  const healthChecks = [
-    { label: 'Web app', state: 'Ready', icon: CheckCircle2 },
-    {
-      label: 'Health API',
-      state: apiState,
-      icon: apiState === 'Ready' ? CheckCircle2 : CircleDashed,
-    },
-    {
-      label: 'Patients API',
-      state: patientsState,
-      icon: patientsState === 'Loaded' ? CheckCircle2 : CircleDashed,
-    },
-    {
-      label: 'Visits API',
-      state: appointmentsState,
-      icon: appointmentsState === 'Loaded' ? CheckCircle2 : CircleDashed,
-    },
-  ];
 
   const patientFormSection = (
     <section className="formCard" aria-labelledby="patient-form-title">
@@ -703,16 +666,6 @@ export default function App() {
           <p className="eyebrow">Doctor workspace</p>
           <h1 id="overview-title">Clinic AI Copilot</h1>
           <p>Review today&apos;s visits and update patient records.</p>
-        </div>
-
-        <div className="statusPanel" aria-label="System status">
-          {healthChecks.map((item) => (
-            <div key={item.label}>
-              <item.icon size={18} />
-              <span>{item.label}</span>
-              <strong>{item.state}</strong>
-            </div>
-          ))}
         </div>
       </section>
 
