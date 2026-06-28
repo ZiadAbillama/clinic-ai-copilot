@@ -133,6 +133,27 @@ app.patch('/api/patients/:id', async (req, res) => {
   }
 });
 
+app.delete('/api/patients/:id', async (req, res) => {
+  try {
+    const patient = await Patient.findOneAndDelete({
+      doctorId: DEMO_DOCTOR_ID,
+      id: req.params.id,
+    })
+      .select(patientPublicFields)
+      .lean();
+
+    if (!patient) {
+      res.status(404).json({ error: 'Patient not found' });
+      return;
+    }
+
+    res.json({ deleted: true, patient });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to delete patient' });
+  }
+});
+
 connectDatabase()
   .then(() => {
     app.listen(port, () => {

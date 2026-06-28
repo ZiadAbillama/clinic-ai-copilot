@@ -49,6 +49,141 @@ button:focus-visible {
   outline-offset: 4px;
 }
 
+.toast {
+  position: fixed;
+  top: 88px;
+  right: clamp(16px, 4vw, 36px);
+  z-index: 30;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  width: min(420px, calc(100vw - 32px));
+  padding: 14px;
+  color: var(--ink);
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--cyan);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+}
+
+.toast svg {
+  color: var(--cyan);
+  margin-top: 2px;
+}
+
+.toast strong,
+.toast span {
+  display: block;
+}
+
+.toast strong {
+  font-family: 'Figtree', Arial, sans-serif;
+  font-size: 16px;
+}
+
+.toast span {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.toast button {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  color: var(--ink-soft);
+  background: var(--cyan-faint);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(2, 5, 27, 0.56);
+}
+
+.confirmDialog {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 16px;
+  width: min(520px, 100%);
+  padding: 24px;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+
+.confirmDialog h2 {
+  font-size: clamp(26px, 4vw, 34px);
+}
+
+.confirmDialog p:not(.eyebrow):not(.formMessage) {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.warningIcon {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  color: #9f1239;
+  background: #fff1f2;
+  border: 1px solid #fecdd3;
+  border-radius: 10px;
+}
+
+.confirmActions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.confirmActions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 14px;
+  color: var(--ink);
+  background: var(--cyan-faint);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 900;
+}
+
+.confirmActions .dangerButton {
+  color: var(--white);
+  background: #be123c;
+  border-color: #be123c;
+}
+
+.confirmActions .dangerButton:hover {
+  background: #9f1239;
+  border-color: #9f1239;
+}
+
+.confirmActions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.64;
+}
+
 .skipLink {
   position: fixed;
   top: 12px;
@@ -265,7 +400,7 @@ h3 {
 
 .panelHeader {
   display: flex;
-  align-items: end;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 16px;
   padding: 24px;
@@ -282,17 +417,19 @@ h3 {
 .panelActions {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 8px;
   align-items: center;
   justify-content: flex-end;
 }
 
 .panelActions button,
-.secondaryButton,
+.formHeader button,
+.patientRowActions button,
 .primaryButton {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   min-height: 42px;
   color: var(--ink);
   font: inherit;
@@ -302,13 +439,14 @@ h3 {
 }
 
 .panelActions button,
-.secondaryButton {
+.formHeader button {
+  min-width: 0;
   padding: 0 14px;
   background: var(--cyan-faint);
 }
 
 .panelActions button:hover,
-.secondaryButton:hover {
+.formHeader button:hover {
   border-color: var(--cyan);
 }
 
@@ -331,16 +469,12 @@ h3 {
 
 .patientRow {
   display: grid;
-  grid-template-columns: 84px minmax(0, 1fr) auto;
-  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   width: 100%;
-  min-height: 86px;
-  padding: 16px 24px;
   color: inherit;
   text-align: left;
   background: transparent;
-  border: 0;
   border-bottom: 1px solid var(--line);
 }
 
@@ -355,6 +489,20 @@ h3 {
 
 .patientRow.selected {
   box-shadow: inset 4px 0 0 var(--cyan);
+}
+
+.patientSelect {
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  width: 100%;
+  min-height: 86px;
+  padding: 16px 24px;
+  color: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
 }
 
 .patientRow time {
@@ -390,6 +538,32 @@ h3 {
   white-space: nowrap;
 }
 
+.patientRowActions {
+  display: flex;
+  gap: 8px;
+  padding-right: 16px;
+}
+
+.patientRowActions button {
+  min-height: 38px;
+  padding: 0 10px;
+  background: var(--white);
+}
+
+.patientRowActions button:last-child {
+  color: #9f1239;
+  border-color: #fecdd3;
+}
+
+.patientRowActions button:hover {
+  border-color: var(--cyan);
+}
+
+.patientRowActions button:last-child:hover {
+  background: #fff1f2;
+  border-color: #fb7185;
+}
+
 .sidePanel {
   display: grid;
   gap: 20px;
@@ -402,8 +576,17 @@ h3 {
   padding: 24px;
 }
 
-.secondaryButton {
-  margin-top: 18px;
+.formHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.formHeader button {
+  flex: 0 0 auto;
+  width: 42px;
+  padding: 0;
 }
 
 .iconBox {
@@ -620,6 +803,18 @@ h3 {
     justify-content: space-between;
   }
 
+  .toast {
+    top: 124px;
+  }
+
+  .confirmDialog {
+    grid-template-columns: 1fr;
+  }
+
+  .confirmActions {
+    flex-direction: column-reverse;
+  }
+
   .overview,
   .workspace,
   .architecture {
@@ -627,19 +822,45 @@ h3 {
     padding-left: 16px;
   }
 
+  .panelHeader {
+    align-items: flex-start;
+    gap: 12px;
+    padding: 20px;
+  }
+
+  .panelActions {
+    max-width: 54%;
+    justify-content: flex-end;
+  }
+
+  .panelActions span {
+    flex-basis: 100%;
+    text-align: right;
+  }
+
+  .panelActions button {
+    min-height: 40px;
+    padding: 0 12px;
+  }
+
   .patientRow {
-    grid-template-columns: 70px minmax(0, 1fr);
+    grid-template-columns: 1fr;
+  }
+
+  .patientSelect {
+    grid-template-columns: 70px minmax(0, 1fr) auto;
+    min-height: 74px;
+    padding: 14px 20px;
   }
 
   .patientRow em {
-    grid-column: 2;
+    grid-column: auto;
     justify-self: start;
     white-space: normal;
   }
 
-  .panelActions {
-    align-items: flex-start;
-    flex-direction: column;
+  .patientRowActions {
+    padding: 0 16px 16px 86px;
   }
 
   .patientForm {
@@ -663,6 +884,34 @@ h3 {
 
   h1 {
     font-size: clamp(40px, 12vw, 48px);
+  }
+
+  .panelHeader {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .panelActions {
+    width: 100%;
+    max-width: none;
+    justify-content: flex-start;
+  }
+
+  .panelActions span {
+    text-align: left;
+  }
+
+  .panelActions button {
+    flex: 1 1 140px;
+  }
+
+  .patientSelect {
+    grid-template-columns: 64px minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .patientRow em {
+    grid-column: 2;
   }
 }
 

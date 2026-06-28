@@ -1,13 +1,18 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   Activity,
+  AlertTriangle,
   CheckCircle2,
   CircleDashed,
   FileText,
   HeartPulse,
+  Pencil,
+  Plus,
   Search,
   ShieldCheck,
   Stethoscope,
+  Trash2,
+  X,
 } from 'lucide-react';
 
 const aiQueue = ['Summarize visit note', 'Search prior notes', 'Mark output for review'];
@@ -31,10 +36,14 @@ export default function App() {
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [selectedPatientState, setSelectedPatientState] = useState('Idle');
   const [selectedPatientError, setSelectedPatientError] = useState('');
-  const [formMode, setFormMode] = useState('create');
+  const [formMode, setFormMode] = useState('closed');
   const [patientForm, setPatientForm] = useState(emptyPatientForm);
   const [formStatus, setFormStatus] = useState('Idle');
   const [formError, setFormError] = useState('');
+  const [manageMode, setManageMode] = useState(false);
+  const [notice, setNotice] = useState(null);
+  const [patientPendingDelete, setPatientPendingDelete] = useState(null);
+  const [deleteStatus, setDeleteStatus] = useState('Idle');
 
   const refreshPatients = useCallback((preferredPatientId) => {
     setPatientsState('Loading');
@@ -84,12 +93,22 @@ export default function App() {
     setPatientForm(emptyPatientForm);
     setFormError('');
     setFormStatus('Idle');
+    setPatientPendingDelete(null);
   }
 
-  function startEditingPatient() {
-    if (!selectedPatient) return;
+  function startEditingPatient(patient = selectedPatient) {
+    if (!patient) return;
+    setSelectedPatientId(patient.id);
+    setSelectedPatient(patient);
     setFormMode('edit');
-    setFormFromPatient(selectedPatient);
+    setFormFromPatient(patient);
+    setFormError('');
+    setFormStatus('Idle');
+    setPatientPendingDelete(null);
+  }
+
+  function closePatientForm() {
+    setFormMode('closed');
     setFormError('');
     setFormStatus('Idle');
   }
@@ -111,16 +130,68 @@ export default function App() {
     })
       .then((res) => (res.ok ? res.json() : Promise.reject(res)))
       .then((patient) => {
+        const wasEditing = isEditing;
         setSelectedPatient(patient);
         setSelectedPatientId(patient.id);
-        setFormMode('edit');
         setFormFromPatient(patient);
         setFormStatus('Saved');
+        setFormMode('closed');
+        setNotice({
+          tone: 'success',
+          title: wasEditing ? 'Patient updated' : 'Patient added',
+          text: `${patient.name} is now saved in the patient list.`,
+        });
         return refreshPatients(patient.id);
       })
       .catch(() => {
         setFormStatus('Error');
         setFormError('Could not save patient. Check the API and try again.');
+      });
+  }
+
+  function handleDeletePatient(patient) {
+    if (!patient) return;
+    setPatientPendingDelete(patient);
+    setDeleteStatus('Idle');
+    setPatientsError('');
+  }
+
+  function closeDeleteDialog() {
+    if (deleteStatus === 'Deleting') return;
+    setPatientPendingDelete(null);
+    setDeleteStatus('Idle');
+  }
+
+  function confirmDeletePatient() {
+    if (!patientPendingDelete) return;
+    const patient = patientPendingDelete;
+
+    setDeleteStatus('Deleting');
+    setPatientsState('Loading');
+    setFormError('');
+
+    fetch(`/api/patients/${encodeURIComponent(patient.id)}`, {
+      method: 'DELETE',
+    })
+      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
+      .then(() => {
+        if (patient.id === selectedPatientId) {
+          setSelectedPatient(null);
+          setSelectedPatientId('');
+          closePatientForm();
+        }
+        setNotice({
+          tone: 'success',
+          title: 'Patient removed',
+          text: `${patient.name} was removed from the patient list.`,
+        });
+        setPatientPendingDelete(null);
+        setDeleteStatus('Idle');
+        return refreshPatients();
+      })
+      .catch(() => {
+        setPatientsState('Loaded');
+        setDeleteStatus('Error');
       });
   }
 
@@ -171,6 +242,16 @@ export default function App() {
     };
   }, [formMode, selectedPatientId, setFormFromPatient]);
 
+  useEffect(() => {
+    if (!notice) return undefined;
+
+    const timeoutId = window.setTimeout(() => {
+      setNotice(null);
+    }, 3200);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [notice]);
+
   const healthChecks = [
     { label: 'Web app', state: 'Ready', icon: CheckCircle2 },
     {
@@ -185,8 +266,161 @@ export default function App() {
     },
   ];
 
+  const patientFormSection = (
+    <section className="formCard" aria-labelledby="patient-form-title">
+      <div className="formHeader">
+        <div>
+          <p className="eyebrow">{formMode === 'edit' ? 'Modify patient' : 'Add patient'}</p>
+          <h2 id="patient-form-title">
+            {formMode === 'edit' ? 'Update patient file' : 'Create patient'}
+          </h2>
+        </div>
+        <button type="button" aria-label="Close patient form" onClick={closePatientForm}>
+          <X size={18} />
+        </button>
+      </div>
+
+      <form className="patientForm" onSubmit={handlePatientSubmit}>
+        <label>
+          Name
+          <input
+            name="name"
+            value={patientForm.name}
+            onChange={handleFormChange}
+            placeholder="Patient name"
+            required
+          />
+        </label>
+        <label>
+          Date of birth
+          <input name="dob" value={patientForm.dob} onChange={handleFormChange} type="date" />
+        </label>
+        <label>
+          Contact
+          <input
+            name="contact"
+            value={patientForm.contact}
+            onChange={handleFormChange}
+            placeholder="+961 ..."
+          />
+        </label>
+        <label>
+          Appointment
+          <input
+            name="appointment"
+            value={patientForm.appointment}
+            onChange={handleFormChange}
+            type="time"
+          />
+        </label>
+        <label className="wideField">
+          Visit reason
+          <input
+            name="reason"
+            value={patientForm.reason}
+            onChange={handleFormChange}
+            placeholder="Reason for visit"
+          />
+        </label>
+        <label>
+          Status
+          <select name="status" value={patientForm.status} onChange={handleFormChange}>
+            <option>Scheduled</option>
+            <option>Checked in</option>
+            <option>Needs vitals</option>
+            <option>Doctor review</option>
+            <option>Completed</option>
+            <option>Cancelled</option>
+          </select>
+        </label>
+        <label>
+          Last visit
+          <input
+            name="lastVisit"
+            value={patientForm.lastVisit}
+            onChange={handleFormChange}
+            placeholder="YYYY-MM-DD or New patient"
+          />
+        </label>
+        <label>
+          Notes
+          <input
+            min="0"
+            name="noteCount"
+            value={patientForm.noteCount}
+            onChange={handleFormChange}
+            type="number"
+          />
+        </label>
+
+        {formError && <p className="formMessage error">{formError}</p>}
+
+        <button className="primaryButton" disabled={formStatus === 'Saving'} type="submit">
+          {formStatus === 'Saving' ? 'Saving...' : 'Save patient'}
+        </button>
+      </form>
+    </section>
+  );
+
   return (
     <main className="appShell">
+      {notice && (
+        <div className={`toast ${notice.tone}`} role="status">
+          <CheckCircle2 size={18} />
+          <div>
+            <strong>{notice.title}</strong>
+            <span>{notice.text}</span>
+          </div>
+          <button type="button" aria-label="Dismiss notification" onClick={() => setNotice(null)}>
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
+      {patientPendingDelete && (
+        <div className="modalOverlay" role="presentation" onClick={closeDeleteDialog}>
+          <section
+            className="confirmDialog"
+            role="dialog"
+            aria-labelledby="delete-patient-title"
+            aria-modal="true"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="warningIcon">
+              <AlertTriangle size={22} />
+            </div>
+            <div>
+              <p className="eyebrow">Remove patient</p>
+              <h2 id="delete-patient-title">Delete {patientPendingDelete.name}?</h2>
+              <p>
+                This removes the patient from the shared development database. This action cannot be
+                undone from this screen.
+              </p>
+            </div>
+
+            {deleteStatus === 'Error' && (
+              <p className="formMessage error">
+                Could not delete patient. Check the API and try again.
+              </p>
+            )}
+
+            <div className="confirmActions">
+              <button type="button" onClick={closeDeleteDialog}>
+                Cancel
+              </button>
+              <button
+                className="dangerButton"
+                disabled={deleteStatus === 'Deleting'}
+                type="button"
+                onClick={confirmDeletePatient}
+              >
+                {deleteStatus === 'Deleting' ? 'Deleting...' : 'Delete patient'}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
       <a className="skipLink" href="#patients">
         Skip to patient list
       </a>
@@ -241,7 +475,12 @@ export default function App() {
                 {patientsState === 'Loaded' ? `${patients.length} active` : patientsState}
               </span>
               <button type="button" onClick={startNewPatient}>
-                New
+                <Plus size={16} />
+                Add patient
+              </button>
+              <button type="button" onClick={() => setManageMode((currentMode) => !currentMode)}>
+                {manageMode ? <X size={16} /> : <Pencil size={16} />}
+                {manageMode ? 'Done' : 'Edit'}
               </button>
             </div>
           </div>
@@ -256,161 +495,95 @@ export default function App() {
             )}
 
             {patients.map((patient) => (
-              <button
+              <article
                 className={patient.id === selectedPatientId ? 'patientRow selected' : 'patientRow'}
                 key={patient.id}
-                type="button"
-                aria-pressed={patient.id === selectedPatientId}
-                onClick={() => setSelectedPatientId(patient.id)}
               >
-                <time>{patient.appointment}</time>
-                <div>
-                  <strong>{patient.name}</strong>
-                  <span>{patient.reason}</span>
-                </div>
-                <em>{patient.status}</em>
-              </button>
+                <button
+                  className="patientSelect"
+                  type="button"
+                  aria-pressed={patient.id === selectedPatientId}
+                  onClick={() => setSelectedPatientId(patient.id)}
+                >
+                  <time>{patient.appointment}</time>
+                  <div>
+                    <strong>{patient.name}</strong>
+                    <span>{patient.reason}</span>
+                  </div>
+                  <em>{patient.status}</em>
+                </button>
+
+                {manageMode && (
+                  <div className="patientRowActions" aria-label={`Manage ${patient.name}`}>
+                    <button type="button" onClick={() => startEditingPatient(patient)}>
+                      <Pencil size={16} />
+                      <span>Modify</span>
+                    </button>
+                    <button type="button" onClick={() => handleDeletePatient(patient)}>
+                      <Trash2 size={16} />
+                      <span>Delete</span>
+                    </button>
+                  </div>
+                )}
+              </article>
             ))}
           </div>
         </div>
 
         <aside className="sidePanel">
-          <section className="detailCard" aria-labelledby="patient-detail-title">
-            <div className="iconBox">
-              <HeartPulse size={20} />
-            </div>
-            <p className="eyebrow">Patient file</p>
-            <h2 id="patient-detail-title">{selectedPatient?.name || 'Select a patient'}</h2>
+          {formMode === 'edit' ? (
+            patientFormSection
+          ) : (
+            <section className="detailCard" aria-labelledby="patient-detail-title">
+              <div className="iconBox">
+                <HeartPulse size={20} />
+              </div>
+              <p className="eyebrow">Patient file</p>
+              <h2 id="patient-detail-title">{selectedPatient?.name || 'Select a patient'}</h2>
 
-            {selectedPatientState === 'Loading' && (
-              <p className="detailMessage">Loading patient details...</p>
-            )}
+              {selectedPatientState === 'Loading' && (
+                <p className="detailMessage">Loading patient details...</p>
+              )}
 
-            {selectedPatientError && <p className="detailMessage error">{selectedPatientError}</p>}
+              {selectedPatientError && (
+                <p className="detailMessage error">{selectedPatientError}</p>
+              )}
 
-            {selectedPatientState === 'Loaded' && selectedPatient && (
-              <>
-                <dl className="detailGrid">
-                  <div>
-                    <dt>Date of birth</dt>
-                    <dd>{selectedPatient.dob}</dd>
+              {selectedPatientState === 'Loaded' && selectedPatient && (
+                <>
+                  <dl className="detailGrid">
+                    <div>
+                      <dt>Date of birth</dt>
+                      <dd>{selectedPatient.dob}</dd>
+                    </div>
+                    <div>
+                      <dt>Contact</dt>
+                      <dd>{selectedPatient.contact}</dd>
+                    </div>
+                    <div>
+                      <dt>Last visit</dt>
+                      <dd>{selectedPatient.lastVisit}</dd>
+                    </div>
+                    <div>
+                      <dt>Notes</dt>
+                      <dd>{selectedPatient.noteCount}</dd>
+                    </div>
+                  </dl>
+
+                  <div className="timelinePreview">
+                    <strong>Next patient steps</strong>
+                    <ol>
+                      <li>Review current visit reason</li>
+                      <li>Add or update medical note</li>
+                      <li>Generate summary when notes are ready</li>
+                    </ol>
                   </div>
-                  <div>
-                    <dt>Contact</dt>
-                    <dd>{selectedPatient.contact}</dd>
-                  </div>
-                  <div>
-                    <dt>Last visit</dt>
-                    <dd>{selectedPatient.lastVisit}</dd>
-                  </div>
-                  <div>
-                    <dt>Notes</dt>
-                    <dd>{selectedPatient.noteCount}</dd>
-                  </div>
-                </dl>
+                </>
+              )}
+            </section>
+          )}
 
-                <div className="timelinePreview">
-                  <strong>Next patient steps</strong>
-                  <ol>
-                    <li>Review current visit reason</li>
-                    <li>Add or update medical note</li>
-                    <li>Generate summary when notes are ready</li>
-                  </ol>
-                </div>
-                <button className="secondaryButton" type="button" onClick={startEditingPatient}>
-                  Edit patient
-                </button>
-              </>
-            )}
-          </section>
-
-          <section className="formCard" aria-labelledby="patient-form-title">
-            <p className="eyebrow">{formMode === 'edit' ? 'Edit patient' : 'New patient'}</p>
-            <h2 id="patient-form-title">
-              {formMode === 'edit' ? 'Update patient file' : 'Create patient'}
-            </h2>
-
-            <form className="patientForm" onSubmit={handlePatientSubmit}>
-              <label>
-                Name
-                <input
-                  name="name"
-                  value={patientForm.name}
-                  onChange={handleFormChange}
-                  placeholder="Patient name"
-                  required
-                />
-              </label>
-              <label>
-                Date of birth
-                <input name="dob" value={patientForm.dob} onChange={handleFormChange} type="date" />
-              </label>
-              <label>
-                Contact
-                <input
-                  name="contact"
-                  value={patientForm.contact}
-                  onChange={handleFormChange}
-                  placeholder="+961 ..."
-                />
-              </label>
-              <label>
-                Appointment
-                <input
-                  name="appointment"
-                  value={patientForm.appointment}
-                  onChange={handleFormChange}
-                  type="time"
-                />
-              </label>
-              <label className="wideField">
-                Visit reason
-                <input
-                  name="reason"
-                  value={patientForm.reason}
-                  onChange={handleFormChange}
-                  placeholder="Reason for visit"
-                />
-              </label>
-              <label>
-                Status
-                <select name="status" value={patientForm.status} onChange={handleFormChange}>
-                  <option>Scheduled</option>
-                  <option>Checked in</option>
-                  <option>Needs vitals</option>
-                  <option>Doctor review</option>
-                  <option>Completed</option>
-                  <option>Cancelled</option>
-                </select>
-              </label>
-              <label>
-                Last visit
-                <input
-                  name="lastVisit"
-                  value={patientForm.lastVisit}
-                  onChange={handleFormChange}
-                  placeholder="YYYY-MM-DD or New patient"
-                />
-              </label>
-              <label>
-                Notes
-                <input
-                  min="0"
-                  name="noteCount"
-                  value={patientForm.noteCount}
-                  onChange={handleFormChange}
-                  type="number"
-                />
-              </label>
-
-              {formError && <p className="formMessage error">{formError}</p>}
-              {formStatus === 'Saved' && <p className="formMessage">Patient saved.</p>}
-
-              <button className="primaryButton" disabled={formStatus === 'Saving'} type="submit">
-                {formStatus === 'Saving' ? 'Saving...' : 'Save patient'}
-              </button>
-            </form>
-          </section>
+          {formMode === 'create' && patientFormSection}
 
           <section className="noteCard" id="notes" aria-labelledby="notes-title">
             <div className="iconBox">

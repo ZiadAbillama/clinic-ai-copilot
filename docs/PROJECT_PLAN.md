@@ -87,6 +87,7 @@ Current (✅):
 - `GET /api/patients/:id` — single from MongoDB Atlas
 - `POST /api/patients` — create a patient for the demo doctor
 - `PATCH /api/patients/:id` — update a patient for the demo doctor
+- `DELETE /api/patients/:id` — remove a patient for the demo doctor
 
 Planned (⬜, all JWT-protected and doctor-scoped):
 
@@ -117,6 +118,6 @@ Planned (⬜, all JWT-protected and doctor-scoped):
 ## 8. Known Limitations (current)
 
 - Patient data uses MongoDB Atlas, seeded from starter data.
-- Patient create/edit exists, but richer validation and duplicate handling are still basic.
+- Patient create/edit/delete exists, but richer validation and duplicate handling are still basic.
 - No auth; the API is unscoped and public.
 - No appointments, notes, timeline, AI, search, or audit log persistence yet.
