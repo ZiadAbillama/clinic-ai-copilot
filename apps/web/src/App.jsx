@@ -1,21 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  Activity,
   AlertTriangle,
   CheckCircle2,
   CircleDashed,
-  FileText,
   HeartPulse,
   Pencil,
   Plus,
-  Search,
-  ShieldCheck,
-  Stethoscope,
   Trash2,
   X,
 } from 'lucide-react';
 
-const aiQueue = ['Summarize visit note', 'Search prior notes', 'Mark output for review'];
 const emptyPatientForm = {
   name: '',
   dob: '',
@@ -436,10 +430,8 @@ export default function App() {
           />
         </a>
 
-        <nav className="topNav" aria-label="Dashboard sections">
+        <nav className="topNav" aria-label="Main section">
           <a href="#patients">Patients</a>
-          <a href="#notes">Notes</a>
-          <a href="#review">AI review</a>
         </nav>
       </header>
 
@@ -550,93 +542,30 @@ export default function App() {
               )}
 
               {selectedPatientState === 'Loaded' && selectedPatient && (
-                <>
-                  <dl className="detailGrid">
-                    <div>
-                      <dt>Date of birth</dt>
-                      <dd>{selectedPatient.dob}</dd>
-                    </div>
-                    <div>
-                      <dt>Contact</dt>
-                      <dd>{selectedPatient.contact}</dd>
-                    </div>
-                    <div>
-                      <dt>Last visit</dt>
-                      <dd>{selectedPatient.lastVisit}</dd>
-                    </div>
-                    <div>
-                      <dt>Notes</dt>
-                      <dd>{selectedPatient.noteCount}</dd>
-                    </div>
-                  </dl>
-
-                  <div className="timelinePreview">
-                    <strong>Next patient steps</strong>
-                    <ol>
-                      <li>Review current visit reason</li>
-                      <li>Add or update medical note</li>
-                      <li>Generate summary when notes are ready</li>
-                    </ol>
+                <dl className="detailGrid">
+                  <div>
+                    <dt>Date of birth</dt>
+                    <dd>{selectedPatient.dob}</dd>
                   </div>
-                </>
+                  <div>
+                    <dt>Contact</dt>
+                    <dd>{selectedPatient.contact}</dd>
+                  </div>
+                  <div>
+                    <dt>Last visit</dt>
+                    <dd>{selectedPatient.lastVisit}</dd>
+                  </div>
+                  <div>
+                    <dt>Notes</dt>
+                    <dd>{selectedPatient.noteCount}</dd>
+                  </div>
+                </dl>
               )}
             </section>
           )}
 
           {formMode === 'create' && patientFormSection}
-
-          <section className="noteCard" id="notes" aria-labelledby="notes-title">
-            <div className="iconBox">
-              <FileText size={20} />
-            </div>
-            <p className="eyebrow">Notes</p>
-            <h2 id="notes-title">Medical note flow</h2>
-            <ol>
-              <li>Open patient</li>
-              <li>Add medical note</li>
-              <li>Generate AI summary</li>
-            </ol>
-          </section>
-
-          <section className="reviewCard" id="review" aria-labelledby="review-title">
-            <div className="iconBox">
-              <ShieldCheck size={20} />
-            </div>
-            <p className="eyebrow">AI review</p>
-            <h2 id="review-title">Doctor approval required</h2>
-            <ul>
-              {aiQueue.map((item) => (
-                <li key={item}>
-                  <CheckCircle2 size={16} />
-                  <span>{item}</span>
-                </li>
-              ))}
-            </ul>
-          </section>
         </aside>
-      </section>
-
-      <section className="architecture" aria-label="Project modules">
-        <article>
-          <HeartPulse size={20} />
-          <h3>Patients</h3>
-          <p>Structured records</p>
-        </article>
-        <article>
-          <Activity size={20} />
-          <h3>Appointments</h3>
-          <p>Clinic schedule</p>
-        </article>
-        <article>
-          <Stethoscope size={20} />
-          <h3>Notes</h3>
-          <p>Medical context</p>
-        </article>
-        <article>
-          <Search size={20} />
-          <h3>AI assistant</h3>
-          <p>Summary and search</p>
-        </article>
       </section>
     </main>
   );

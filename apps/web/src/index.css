@@ -384,10 +384,7 @@ h3 {
 
 .patientPanel,
 .detailCard,
-.formCard,
-.noteCard,
-.reviewCard,
-.architecture article {
+.formCard {
   background: var(--white);
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -570,9 +567,7 @@ h3 {
 }
 
 .detailCard,
-.formCard,
-.noteCard,
-.reviewCard {
+.formCard {
   padding: 24px;
 }
 
@@ -599,35 +594,6 @@ h3 {
   background: var(--cyan-faint);
   border: 1px solid var(--line);
   border-radius: 10px;
-}
-
-.noteCard ol,
-.reviewCard ul {
-  display: grid;
-  gap: 10px;
-  margin: 18px 0 0;
-  padding: 0;
-}
-
-.noteCard li {
-  margin-left: 18px;
-  color: var(--ink-soft);
-  font-weight: 700;
-}
-
-.reviewCard li {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 10px;
-  align-items: start;
-  color: var(--ink-soft);
-  font-weight: 700;
-  list-style: none;
-}
-
-.reviewCard svg {
-  color: var(--cyan);
-  margin-top: 2px;
 }
 
 .detailMessage {
@@ -667,28 +633,6 @@ h3 {
   color: var(--ink);
   font-weight: 900;
   overflow-wrap: anywhere;
-}
-
-.timelinePreview {
-  margin-top: 20px;
-  padding-top: 18px;
-  border-top: 1px solid var(--line);
-}
-
-.timelinePreview strong {
-  display: block;
-  color: var(--ink);
-  font-family: 'Figtree', Arial, sans-serif;
-  font-size: 18px;
-}
-
-.timelinePreview ol {
-  display: grid;
-  gap: 8px;
-  margin: 12px 0 0;
-  padding-left: 18px;
-  color: var(--ink-soft);
-  font-weight: 700;
 }
 
 .patientForm {
@@ -757,37 +701,10 @@ h3 {
   opacity: 0.64;
 }
 
-.architecture {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 16px;
-  padding: 0 clamp(18px, 5vw, 72px) clamp(36px, 6vw, 72px);
-}
-
-.architecture article {
-  min-height: 154px;
-  padding: 22px;
-}
-
-.architecture svg {
-  color: var(--cyan);
-  margin-bottom: 24px;
-}
-
-.architecture p {
-  margin: 10px 0 0;
-  color: var(--muted);
-  font-weight: 700;
-}
-
 @media (max-width: 980px) {
   .overview,
   .workspace {
     grid-template-columns: 1fr;
-  }
-
-  .architecture {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -816,8 +733,7 @@ h3 {
   }
 
   .overview,
-  .workspace,
-  .architecture {
+  .workspace {
     padding-right: 16px;
     padding-left: 16px;
   }
@@ -864,10 +780,6 @@ h3 {
   }
 
   .patientForm {
-    grid-template-columns: 1fr;
-  }
-
-  .architecture {
     grid-template-columns: 1fr;
   }
 }
