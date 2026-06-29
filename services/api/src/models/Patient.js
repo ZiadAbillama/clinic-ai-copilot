@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { visitStatuses } from '../statuses.js';
 
 const patientSchema = new mongoose.Schema(
   {
@@ -35,6 +36,7 @@ const patientSchema = new mongoose.Schema(
     status: {
       type: String,
       default: 'Scheduled',
+      enum: visitStatuses,
     },
     lastVisit: {
       type: String,
@@ -45,6 +47,11 @@ const patientSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    archivedAt: {
+      type: Date,
+      default: null,
+      index: true,
+    },
   },
   {
     timestamps: true,
@@ -52,5 +59,6 @@ const patientSchema = new mongoose.Schema(
 );
 
 patientSchema.index({ doctorId: 1, id: 1 }, { unique: true });
+patientSchema.index({ doctorId: 1, archivedAt: 1, appointment: 1, id: 1 });
 
 export const Patient = mongoose.models.Patient || mongoose.model('Patient', patientSchema);

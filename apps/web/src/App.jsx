@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -11,22 +11,45 @@ import {
 } from 'lucide-react';
 
 const authStorageKey = 'clinic-ai-auth';
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL;
+
+if (import.meta.env.PROD && !configuredApiBaseUrl) {
+  throw new Error('VITE_API_BASE_URL is required for production builds.');
+}
+
+const apiBaseUrl = configuredApiBaseUrl || 'http://localhost:3001';
+const patientPageLimit = 10;
+const detailPageLimit = 5;
+const visitStatuses = Object.freeze([
+  'Scheduled',
+  'Checked in',
+  'Needs vitals',
+  'Doctor review',
+  'Completed',
+  'Cancelled',
+]);
+
+function getTodayDateString() {
+  const now = new Date();
+  const localDate = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+  return localDate.toISOString().slice(0, 10);
+}
 
 const emptyPatientForm = {
   name: '',
   dob: '',
   contact: '',
   lastVisit: '',
-  noteCount: 0,
 };
 
-const emptyAppointmentForm = {
-  scheduledDate: '2026-06-28',
-  scheduledTime: '',
-  reason: '',
-  status: 'Scheduled',
-};
+function createEmptyAppointmentForm() {
+  return {
+    scheduledDate: getTodayDateString(),
+    scheduledTime: '',
+    reason: '',
+    status: 'Scheduled',
+  };
+}
 
 const emptyNoteForm = {
   appointmentId: '',
@@ -52,6 +75,52 @@ function apiUrl(path) {
   return `${apiBaseUrl}${path}`;
 }
 
+function buildQuery(params) {
+  const query = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== '') {
+      query.set(key, String(value));
+    }
+  }
+
+  return query.toString();
+}
+
+function paginationFromResponse(res, page, limit) {
+  return {
+    page: Number(res.headers.get('X-Pagination-Page')) || page,
+    limit: Number(res.headers.get('X-Pagination-Limit')) || limit,
+    hasNextPage: res.headers.get('X-Pagination-Has-Next-Page') === 'true',
+  };
+}
+
+function createPagination(limit) {
+  return {
+    page: 1,
+    limit,
+    hasNextPage: false,
+  };
+}
+
+function PaginationControls({ disabled = false, label, onNext, onPrevious, pagination }) {
+  return (
+    <nav className="paginationBar" aria-label={`${label} pagination`}>
+      <span>
+        {label} page {pagination.page}
+      </span>
+      <div>
+        <button type="button" disabled={disabled || pagination.page <= 1} onClick={onPrevious}>
+          Previous
+        </button>
+        <button type="button" disabled={disabled || !pagination.hasNextPage} onClick={onNext}>
+          Next
+        </button>
+      </div>
+    </nav>
+  );
+}
+
 export default function App() {
   const storedSession = loadStoredSession();
   const [authToken, setAuthToken] = useState(storedSession?.token || '');
@@ -63,9 +132,15 @@ export default function App() {
   const [patients, setPatients] = useState([]);
   const [patientsState, setPatientsState] = useState('Loading');
   const [patientsError, setPatientsError] = useState('');
+  const [patientsPage, setPatientsPage] = useState(1);
+  const [patientsPagination, setPatientsPagination] = useState(createPagination(patientPageLimit));
   const [appointments, setAppointments] = useState([]);
-  const [, setAppointmentsState] = useState('Loading');
+  const [appointmentsState, setAppointmentsState] = useState('Loading');
   const [appointmentsError, setAppointmentsError] = useState('');
+  const [appointmentsPage, setAppointmentsPage] = useState(1);
+  const [appointmentsPagination, setAppointmentsPagination] = useState(
+    createPagination(detailPageLimit),
+  );
   const [selectedPatientId, setSelectedPatientId] = useState('');
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [selectedPatientState, setSelectedPatientState] = useState('Idle');
@@ -79,7 +154,7 @@ export default function App() {
   const [patientPendingDelete, setPatientPendingDelete] = useState(null);
   const [deleteStatus, setDeleteStatus] = useState('Idle');
   const [appointmentFormMode, setAppointmentFormMode] = useState('closed');
-  const [appointmentForm, setAppointmentForm] = useState(emptyAppointmentForm);
+  const [appointmentForm, setAppointmentForm] = useState(createEmptyAppointmentForm);
   const [appointmentFormStatus, setAppointmentFormStatus] = useState('Idle');
   const [appointmentFormError, setAppointmentFormError] = useState('');
   const [visitsOpen, setVisitsOpen] = useState(false);
@@ -88,12 +163,20 @@ export default function App() {
   const [timeline, setTimeline] = useState([]);
   const [timelineState, setTimelineState] = useState('Idle');
   const [timelineError, setTimelineError] = useState('');
+  const [timelinePage, setTimelinePage] = useState(1);
+  const [timelinePagination, setTimelinePagination] = useState(createPagination(detailPageLimit));
+  const [notes, setNotes] = useState([]);
+  const [notesState, setNotesState] = useState('Idle');
+  const [notesError, setNotesError] = useState('');
+  const [notesPage, setNotesPage] = useState(1);
+  const [notesPagination, setNotesPagination] = useState(createPagination(detailPageLimit));
   const [noteFormMode, setNoteFormMode] = useState('closed');
   const [noteForm, setNoteForm] = useState(emptyNoteForm);
   const [noteFormStatus, setNoteFormStatus] = useState('Idle');
   const [noteFormError, setNoteFormError] = useState('');
   const [editingNoteId, setEditingNoteId] = useState('');
   const [patientSearch, setPatientSearch] = useState('');
+  const deleteDialogRef = useRef(null);
 
   const clearSession = useCallback(() => {
     window.localStorage.removeItem(authStorageKey);
@@ -101,9 +184,15 @@ export default function App() {
     setDoctor(null);
     setPatients([]);
     setAppointments([]);
+    setNotes([]);
+    setTimeline([]);
     setSelectedPatientId('');
     setSelectedPatient(null);
     setAuthStatus('Idle');
+    setPatientsPage(1);
+    setAppointmentsPage(1);
+    setNotesPage(1);
+    setTimelinePage(1);
   }, []);
 
   const apiFetch = useCallback(
@@ -130,54 +219,46 @@ export default function App() {
       if (!authToken) return Promise.resolve({ patients: [], appointments: [] });
 
       setPatientsState('Loading');
-      setAppointmentsState('Loading');
 
-      const patientsRequest = apiFetch('/api/patients').then((res) =>
-        res.ok ? res.json() : Promise.reject(res),
-      );
-      const appointmentsRequest = apiFetch('/api/appointments').then((res) =>
-        res.ok ? res.json() : Promise.reject(res),
-      );
+      const patientsRequest = apiFetch(
+        `/api/patients?${buildQuery({ page: patientsPage, limit: patientPageLimit })}`,
+      ).then(async (res) => {
+        if (!res.ok) throw res;
 
-      return Promise.allSettled([patientsRequest, appointmentsRequest]).then(
-        ([patientsResult, appointmentsResult]) => {
-          if (patientsResult.status === 'fulfilled') {
-            setPatients(patientsResult.value);
-            setPatientsState('Loaded');
-            setPatientsError('');
+        return {
+          data: await res.json(),
+          pagination: paginationFromResponse(res, patientsPage, patientPageLimit),
+        };
+      });
 
-            if (patientsResult.value.length > 0) {
-              setSelectedPatientId(
-                (currentId) => preferredPatientId || currentId || patientsResult.value[0].id,
-              );
-            } else {
-              setSelectedPatientId('');
-              setSelectedPatient(null);
-            }
+      return Promise.allSettled([patientsRequest]).then(([patientsResult]) => {
+        if (patientsResult.status === 'fulfilled') {
+          setPatients(patientsResult.value.data);
+          setPatientsPagination(patientsResult.value.pagination);
+          setPatientsState('Loaded');
+          setPatientsError('');
+
+          if (patientsResult.value.data.length > 0) {
+            setSelectedPatientId(
+              (currentId) => preferredPatientId || currentId || patientsResult.value.data[0].id,
+            );
           } else {
-            setPatients([]);
-            setPatientsState('Offline');
-            setPatientsError('Patients are unavailable. Start the API and refresh.');
+            setSelectedPatientId('');
+            setSelectedPatient(null);
           }
+        } else {
+          setPatients([]);
+          setPatientsState('Offline');
+          setPatientsError('Patients are unavailable. Start the API and refresh.');
+        }
 
-          if (appointmentsResult.status === 'fulfilled') {
-            setAppointments(appointmentsResult.value);
-            setAppointmentsState('Loaded');
-            setAppointmentsError('');
-          } else {
-            setAppointments([]);
-            setAppointmentsState('Offline');
-            setAppointmentsError('Visits are unavailable. Patient records are still shown.');
-          }
-
-          return {
-            patients: patientsResult.status === 'fulfilled' ? patientsResult.value : [],
-            appointments: appointmentsResult.status === 'fulfilled' ? appointmentsResult.value : [],
-          };
-        },
-      );
+        return {
+          patients: patientsResult.status === 'fulfilled' ? patientsResult.value.data : [],
+          appointments: [],
+        };
+      });
     },
-    [apiFetch, authToken],
+    [apiFetch, authToken, patientsPage],
   );
 
   const setFormFromPatient = useCallback((patient) => {
@@ -186,7 +267,6 @@ export default function App() {
       dob: patient.dob || '',
       contact: patient.contact || '',
       lastVisit: patient.lastVisit || '',
-      noteCount: patient.noteCount || 0,
     });
   }, []);
 
@@ -196,7 +276,7 @@ export default function App() {
 
   function setAppointmentFormFromVisit(appointment) {
     setAppointmentForm({
-      scheduledDate: appointment?.scheduledDate || '2026-06-28',
+      scheduledDate: appointment?.scheduledDate || getTodayDateString(),
       scheduledTime: appointment?.scheduledTime || '',
       reason: appointment?.reason || '',
       status: appointment?.status || 'Scheduled',
@@ -207,9 +287,54 @@ export default function App() {
     const { name, value } = event.target;
     setPatientForm((currentForm) => ({
       ...currentForm,
-      [name]: name === 'noteCount' ? Number(value) : value,
+      [name]: value,
     }));
   }
+
+  const loadAppointments = useCallback(
+    (patientId = selectedPatientId, page = appointmentsPage) => {
+      if (!authToken || !patientId) {
+        setAppointments([]);
+        setAppointmentsPagination(createPagination(detailPageLimit));
+        setAppointmentsState('Idle');
+        return Promise.resolve([]);
+      }
+
+      setAppointmentsState('Loading');
+      setAppointmentsError('');
+
+      return apiFetch(
+        `/api/appointments?${buildQuery({
+          patientId,
+          page,
+          limit: detailPageLimit,
+        })}`,
+      )
+        .then(async (res) => {
+          if (!res.ok) throw res;
+
+          return {
+            data: await res.json(),
+            pagination: paginationFromResponse(res, page, detailPageLimit),
+          };
+        })
+        .then(({ data, pagination }) => {
+          setAppointments(data);
+          setAppointmentsPagination(pagination);
+          setAppointmentsState('Loaded');
+          setAppointmentsError('');
+          return data;
+        })
+        .catch(() => {
+          setAppointments([]);
+          setAppointmentsPagination(createPagination(detailPageLimit));
+          setAppointmentsState('Offline');
+          setAppointmentsError('Visits are unavailable. Patient records are still shown.');
+          return [];
+        });
+    },
+    [apiFetch, appointmentsPage, authToken, selectedPatientId],
+  );
 
   function startNewPatient() {
     setFormMode('create');
@@ -267,10 +392,45 @@ export default function App() {
 
   function selectPatient(patientId) {
     setSelectedPatientId(patientId);
+    setAppointmentsPage(1);
+    setNotesPage(1);
+    setTimelinePage(1);
     closeAppointmentForm();
     closeNoteForm();
     setVisitsOpen(false);
     setTimelineOpen(false);
+  }
+
+  function previousPatientsPage() {
+    setPatientsPage((currentPage) => Math.max(currentPage - 1, 1));
+  }
+
+  function nextPatientsPage() {
+    setPatientsPage((currentPage) => currentPage + 1);
+  }
+
+  function previousAppointmentsPage() {
+    setAppointmentsPage((currentPage) => Math.max(currentPage - 1, 1));
+  }
+
+  function nextAppointmentsPage() {
+    setAppointmentsPage((currentPage) => currentPage + 1);
+  }
+
+  function previousTimelinePage() {
+    setTimelinePage((currentPage) => Math.max(currentPage - 1, 1));
+  }
+
+  function nextTimelinePage() {
+    setTimelinePage((currentPage) => currentPage + 1);
+  }
+
+  function previousNotesPage() {
+    setNotesPage((currentPage) => Math.max(currentPage - 1, 1));
+  }
+
+  function nextNotesPage() {
+    setNotesPage((currentPage) => currentPage + 1);
   }
 
   function handleAppointmentFormChange(event) {
@@ -289,27 +449,84 @@ export default function App() {
     }));
   }
 
-  function loadTimeline(patientId = selectedPatientId) {
-    if (!patientId) return Promise.resolve();
+  const loadTimeline = useCallback(
+    (patientId = selectedPatientId, page = timelinePage) => {
+      if (!patientId) return Promise.resolve();
 
-    setTimelineState('Loading');
-    setTimelineError('');
+      setTimelineState('Loading');
+      setTimelineError('');
 
-    return apiFetch(`/api/patients/${encodeURIComponent(patientId)}/timeline`)
-      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
-      .then((data) => {
-        setTimeline(data.timeline || []);
-        setSelectedPatient(data.patient);
-        setTimelineState('Loaded');
-        setTimelineError('');
-        return data;
-      })
-      .catch(() => {
-        setTimeline([]);
-        setTimelineState('Offline');
-        setTimelineError('Timeline is unavailable. Check the API and try again.');
-      });
-  }
+      return apiFetch(
+        `/api/patients/${encodeURIComponent(patientId)}/timeline?${buildQuery({
+          page,
+          limit: detailPageLimit,
+        })}`,
+      )
+        .then(async (res) => {
+          if (!res.ok) throw res;
+
+          return {
+            data: await res.json(),
+            pagination: paginationFromResponse(res, page, detailPageLimit),
+          };
+        })
+        .then(({ data, pagination }) => {
+          setTimeline(data.timeline || []);
+          setTimelinePagination(data.pagination || pagination);
+          setSelectedPatient(data.patient);
+          setTimelineState('Loaded');
+          setTimelineError('');
+          return data;
+        })
+        .catch(() => {
+          setTimeline([]);
+          setTimelinePagination(createPagination(detailPageLimit));
+          setTimelineState('Offline');
+          setTimelineError('Timeline is unavailable. Check the API and try again.');
+        });
+    },
+    [apiFetch, selectedPatientId, timelinePage],
+  );
+
+  const loadNotes = useCallback(
+    (patientId = selectedPatientId, page = notesPage) => {
+      if (!patientId) return Promise.resolve([]);
+
+      setNotesState('Loading');
+      setNotesError('');
+
+      return apiFetch(
+        `/api/notes?${buildQuery({
+          patientId,
+          page,
+          limit: detailPageLimit,
+        })}`,
+      )
+        .then(async (res) => {
+          if (!res.ok) throw res;
+
+          return {
+            data: await res.json(),
+            pagination: paginationFromResponse(res, page, detailPageLimit),
+          };
+        })
+        .then(({ data, pagination }) => {
+          setNotes(data);
+          setNotesPagination(pagination);
+          setNotesState('Loaded');
+          setNotesError('');
+          return data;
+        })
+        .catch(() => {
+          setNotes([]);
+          setNotesPagination(createPagination(detailPageLimit));
+          setNotesState('Offline');
+          setNotesError('Notes are unavailable. Check the API and try again.');
+          return [];
+        });
+    },
+    [apiFetch, notesPage, selectedPatientId],
+  );
 
   function toggleTimeline() {
     if (timelineOpen) {
@@ -321,7 +538,6 @@ export default function App() {
     closeAppointmentForm();
     setVisitsOpen(false);
     setTimelineOpen(true);
-    loadTimeline();
   }
 
   function startNoteForm(mode, note) {
@@ -403,6 +619,12 @@ export default function App() {
         if (patient.id === selectedPatientId) {
           setSelectedPatient(null);
           setSelectedPatientId('');
+          setAppointments([]);
+          setNotes([]);
+          setTimeline([]);
+          setAppointmentsPage(1);
+          setNotesPage(1);
+          setTimelinePage(1);
           closePatientForm();
           closeAppointmentForm();
           closeNoteForm();
@@ -446,9 +668,11 @@ export default function App() {
     })
       .then((res) => (res.ok ? res.json() : Promise.reject(res)))
       .then((appointment) => {
+        const nextPage = isEditing ? appointmentsPage : 1;
         setAppointmentFormStatus('Saved');
         setAppointmentFormMode('closed');
         setEditingAppointmentId('');
+        if (!isEditing) setAppointmentsPage(1);
         setVisitsOpen(true);
         setTimelineOpen(false);
         setNotice({
@@ -456,7 +680,10 @@ export default function App() {
           title: isEditing ? 'Visit updated' : 'Visit scheduled',
           text: `${appointment.patient.name} is set for ${appointment.scheduledTime || appointment.scheduledDate}.`,
         });
-        return refreshWorkspace(selectedPatientId);
+        return Promise.all([
+          loadAppointments(selectedPatientId, nextPage),
+          refreshWorkspace(selectedPatientId),
+        ]);
       })
       .catch(() => {
         setAppointmentFormStatus('Error');
@@ -483,15 +710,21 @@ export default function App() {
     })
       .then((res) => (res.ok ? res.json() : Promise.reject(res)))
       .then(() => {
+        const nextPage = isEditing ? notesPage : 1;
         setNoteFormStatus('Saved');
         closeNoteForm();
+        if (!isEditing) setNotesPage(1);
         setTimelineOpen(true);
         setNotice({
           tone: 'success',
           title: isEditing ? 'Note updated' : 'Note added',
           text: `${selectedPatient?.name || 'Patient'} timeline is up to date.`,
         });
-        return Promise.all([loadTimeline(selectedPatientId), refreshWorkspace(selectedPatientId)]);
+        return Promise.all([
+          loadTimeline(selectedPatientId, timelinePage),
+          loadNotes(selectedPatientId, nextPage),
+          refreshWorkspace(selectedPatientId),
+        ]);
       })
       .catch(() => {
         setNoteFormStatus('Error');
@@ -512,7 +745,11 @@ export default function App() {
           title: 'Note removed',
           text: `${selectedPatient?.name || 'Patient'} timeline is up to date.`,
         });
-        return Promise.all([loadTimeline(selectedPatientId), refreshWorkspace(selectedPatientId)]);
+        return Promise.all([
+          loadTimeline(selectedPatientId, timelinePage),
+          loadNotes(selectedPatientId, notesPage),
+          refreshWorkspace(selectedPatientId),
+        ]);
       })
       .catch(() => {
         setTimelineError('Could not delete note. Check the API and try again.');
@@ -562,13 +799,21 @@ export default function App() {
     })
       .then(async (res) => {
         const data = await res.json().catch(() => ({}));
+        if (res.status === 401) {
+          throw new Error('Email or password is incorrect.');
+        }
+
         if (!res.ok) throw new Error(data.error || 'Could not sign in.');
         return data;
       })
       .then(saveSession)
       .catch((error) => {
         setAuthStatus('Error');
-        setAuthError(error.message || 'Could not sign in.');
+        setAuthError(
+          error instanceof TypeError
+            ? 'Could not reach the API. Check that the server is running.'
+            : error.message || 'Could not sign in.',
+        );
       });
   }
 
@@ -578,8 +823,72 @@ export default function App() {
   }
 
   useEffect(() => {
+    if (!patientPendingDelete) return undefined;
+
+    const dialog = deleteDialogRef.current;
+    const focusableElements = dialog
+      ? Array.from(
+          dialog.querySelectorAll(
+            'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+          ),
+        ).filter((element) => !element.disabled)
+      : [];
+    const firstFocusable = focusableElements[0];
+    const previousActiveElement = document.activeElement;
+
+    firstFocusable?.focus();
+
+    function handleDialogKeyDown(event) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        if (deleteStatus !== 'Deleting') {
+          setPatientPendingDelete(null);
+          setDeleteStatus('Idle');
+        }
+        return;
+      }
+
+      if (event.key !== 'Tab' || focusableElements.length === 0) return;
+
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements[focusableElements.length - 1];
+
+      if (event.shiftKey && document.activeElement === firstElement) {
+        event.preventDefault();
+        lastElement.focus();
+      } else if (!event.shiftKey && document.activeElement === lastElement) {
+        event.preventDefault();
+        firstElement.focus();
+      }
+    }
+
+    document.addEventListener('keydown', handleDialogKeyDown);
+
+    return () => {
+      document.removeEventListener('keydown', handleDialogKeyDown);
+      previousActiveElement?.focus?.();
+    };
+  }, [deleteStatus, patientPendingDelete]);
+
+  useEffect(() => {
     refreshWorkspace();
   }, [refreshWorkspace]);
+
+  useEffect(() => {
+    loadAppointments();
+  }, [loadAppointments]);
+
+  useEffect(() => {
+    if (!timelineOpen) return;
+
+    loadTimeline();
+  }, [loadTimeline, timelineOpen]);
+
+  useEffect(() => {
+    if (!timelineOpen) return;
+
+    loadNotes();
+  }, [loadNotes, timelineOpen]);
 
   useEffect(() => {
     if (!authToken) return undefined;
@@ -686,16 +995,6 @@ export default function App() {
             value={patientForm.lastVisit}
             onChange={handleFormChange}
             placeholder="YYYY-MM-DD or New patient"
-          />
-        </label>
-        <label>
-          Notes
-          <input
-            min="0"
-            name="noteCount"
-            value={patientForm.noteCount}
-            onChange={handleFormChange}
-            type="number"
           />
         </label>
         {formError && <p className="formMessage error">{formError}</p>}
@@ -880,13 +1179,13 @@ export default function App() {
       )}
 
       {patientPendingDelete && (
-        <div className="modalOverlay" role="presentation" onClick={closeDeleteDialog}>
+        <div className="modalOverlay" role="presentation">
           <section
+            ref={deleteDialogRef}
             className="confirmDialog"
             role="dialog"
             aria-labelledby="delete-patient-title"
             aria-modal="true"
-            onClick={(event) => event.stopPropagation()}
           >
             <div className="warningIcon">
               <AlertTriangle size={22} />
@@ -963,7 +1262,7 @@ export default function App() {
           <div className="panelHeader">
             <div>
               <p className="eyebrow">Records</p>
-              <h2>Patients{patientsState === 'Loaded' ? ` (${patients.length})` : ''}</h2>
+              <h2>Patients</h2>
             </div>
             <div className="panelActions">
               <label className="patientSearch">
@@ -1071,6 +1370,13 @@ export default function App() {
               </article>
             ))}
           </div>
+          <PaginationControls
+            disabled={patientsState === 'Loading'}
+            label="Patients"
+            pagination={patientsPagination}
+            onPrevious={previousPatientsPage}
+            onNext={nextPatientsPage}
+          />
         </div>
 
         <aside className="sidePanel">
@@ -1097,11 +1403,11 @@ export default function App() {
                   <dl className="detailGrid">
                     <div>
                       <dt>Date of birth</dt>
-                      <dd>{selectedPatient.dob}</dd>
+                      <dd>{selectedPatient.dob || 'Not set'}</dd>
                     </div>
                     <div>
                       <dt>Contact</dt>
-                      <dd>{selectedPatient.contact}</dd>
+                      <dd>{selectedPatient.contact || 'No contact'}</dd>
                     </div>
                   </dl>
 
@@ -1114,10 +1420,10 @@ export default function App() {
                         closeNoteForm();
                       }}
                     >
-                      {visitsOpen ? 'Hide visits' : `View visits (${selectedPatientVisits.length})`}
+                      {visitsOpen ? 'Hide visits' : 'View visits'}
                     </button>
                     <button type="button" onClick={toggleTimeline}>
-                      {timelineOpen ? 'Hide timeline' : 'Timeline'}
+                      {timelineOpen ? 'Hide timeline' : 'View timeline'}
                     </button>
                   </div>
 
@@ -1150,10 +1456,11 @@ export default function App() {
                           )}
 
                           {selectedPatientVisits.map((visit) => {
+                            const today = getTodayDateString();
                             const visitCategory =
                               visit.status === 'Completed' ||
                               visit.status === 'Cancelled' ||
-                              visit.scheduledDate < '2026-06-28'
+                              visit.scheduledDate < today
                                 ? 'Previous'
                                 : 'Scheduled';
                             const visitDateTime = visit.scheduledTime
@@ -1179,6 +1486,13 @@ export default function App() {
                               </article>
                             );
                           })}
+                          <PaginationControls
+                            disabled={appointmentsState === 'Loading'}
+                            label="Visits"
+                            pagination={appointmentsPagination}
+                            onPrevious={previousAppointmentsPage}
+                            onNext={nextAppointmentsPage}
+                          />
                         </div>
                       )}
 
@@ -1209,12 +1523,9 @@ export default function App() {
                               value={appointmentForm.status}
                               onChange={handleAppointmentFormChange}
                             >
-                              <option>Scheduled</option>
-                              <option>Checked in</option>
-                              <option>Needs vitals</option>
-                              <option>Doctor review</option>
-                              <option>Completed</option>
-                              <option>Cancelled</option>
+                              {visitStatuses.map((status) => (
+                                <option key={status}>{status}</option>
+                              ))}
                             </select>
                           </label>
                           <label className="wideField">
@@ -1363,7 +1674,74 @@ export default function App() {
                               )}
                             </article>
                           ))}
+                          <PaginationControls
+                            disabled={timelineState === 'Loading'}
+                            label="Timeline"
+                            pagination={timelinePagination}
+                            onPrevious={previousTimelinePage}
+                            onNext={nextTimelinePage}
+                          />
                         </div>
+                      )}
+
+                      {noteFormMode === 'closed' && (
+                        <section className="notesPanel" aria-labelledby="notes-panel-title">
+                          <div className="timelineHeader">
+                            <div>
+                              <p className="eyebrow">Notes</p>
+                              <h3 id="notes-panel-title">Clinical notes</h3>
+                            </div>
+                          </div>
+
+                          {notesError && <p className="detailMessage error">{notesError}</p>}
+                          {notesState === 'Loading' && (
+                            <p className="detailMessage">Loading notes...</p>
+                          )}
+
+                          {notesState === 'Loaded' && (
+                            <div className="timelineList">
+                              <div className="notesTableHeader" aria-hidden="true">
+                                <span>Date</span>
+                                <span>Note</span>
+                                <span>Visit</span>
+                                <span>Actions</span>
+                              </div>
+
+                              {notes.length === 0 && (
+                                <p className="detailMessage">No notes found.</p>
+                              )}
+
+                              {notes.map((note) => (
+                                <article className="noteRow" key={note.id}>
+                                  <time dateTime={note.createdAt}>
+                                    {note.createdAt?.slice(0, 10)}
+                                  </time>
+                                  <strong>{note.text}</strong>
+                                  <span>{note.appointmentId || 'Standalone'}</span>
+                                  <div className="timelineActions">
+                                    <button
+                                      type="button"
+                                      onClick={() => startNoteForm('edit', note)}
+                                    >
+                                      Edit
+                                    </button>
+                                    <button type="button" onClick={() => deleteNote(note)}>
+                                      Delete
+                                    </button>
+                                  </div>
+                                </article>
+                              ))}
+
+                              <PaginationControls
+                                disabled={notesState === 'Loading'}
+                                label="Notes"
+                                pagination={notesPagination}
+                                onPrevious={previousNotesPage}
+                                onNext={nextNotesPage}
+                              />
+                            </div>
+                          )}
+                        </section>
                       )}
                     </section>
                   )}

@@ -3,19 +3,116 @@ import express from 'express';
 import cors from 'cors';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { JWT_EXPIRES_IN, JWT_SECRET } from './config.js';
+import { CORS_ORIGINS, JWT_EXPIRES_IN, JWT_SECRET } from './config.js';
 import { connectDatabase } from './db.js';
 import { AuditLog } from './models/AuditLog.js';
 import { Appointment } from './models/Appointment.js';
 import { Doctor } from './models/Doctor.js';
 import { Note } from './models/Note.js';
 import { Patient } from './models/Patient.js';
+import { visitStatuses } from './statuses.js';
 
 const app = express();
 const port = process.env.API_PORT || 3001;
-const patientPublicFields = '-_id -__v -doctorId -createdAt -updatedAt';
-const appointmentPublicFields = '-_id -__v -doctorId -createdAt -updatedAt';
-const notePublicFields = '-_id -__v -doctorId';
+const patientPublicFields = '-_id -__v -doctorId -createdAt -updatedAt -archivedAt';
+const appointmentPublicFields = '-_id -__v -doctorId -createdAt -updatedAt -archivedAt';
+const notePublicFields = '-_id -__v -doctorId -archivedAt';
+const visitStatusSet = new Set(visitStatuses);
+const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
+const patientFieldMaxLengths = {
+  name: 120,
+  dob: 10,
+  contact: 40,
+  reason: 160,
+  appointment: 5,
+  status: 32,
+  lastVisit: 20,
+};
+const appointmentFieldMaxLengths = {
+  patientId: 64,
+  scheduledDate: 10,
+  scheduledTime: 5,
+  reason: 160,
+  status: 32,
+};
+
+function getTodayDateString() {
+  const now = new Date();
+  const localDate = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+  return localDate.toISOString().slice(0, 10);
+}
+
+function createInputError(message) {
+  const error = new Error(message);
+  error.name = 'InputError';
+  return error;
+}
+
+function isInputError(error) {
+  return error.name === 'InputError' || error.name === 'ValidationError';
+}
+
+function isDateString(value) {
+  if (!datePattern.test(value)) return false;
+
+  const parsedDate = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsedDate.getTime()) && parsedDate.toISOString().slice(0, 10) === value;
+}
+
+function validateMaxLengths(cleaned, lengths) {
+  for (const [field, maxLength] of Object.entries(lengths)) {
+    if (Object.hasOwn(cleaned, field) && String(cleaned[field]).length > maxLength) {
+      throw createInputError(`${field} must be ${maxLength} characters or fewer.`);
+    }
+  }
+}
+
+function validateDateField(cleaned, field) {
+  if (Object.hasOwn(cleaned, field) && cleaned[field] && !isDateString(cleaned[field])) {
+    throw createInputError(`${field} must use YYYY-MM-DD format.`);
+  }
+}
+
+function validateTimeField(cleaned, field) {
+  if (Object.hasOwn(cleaned, field) && cleaned[field] && !timePattern.test(cleaned[field])) {
+    throw createInputError(`${field} must use HH:mm format.`);
+  }
+}
+
+function validateStatusField(cleaned) {
+  if (Object.hasOwn(cleaned, 'status') && cleaned.status && !visitStatusSet.has(cleaned.status)) {
+    throw createInputError(`status must be one of: ${visitStatuses.join(', ')}.`);
+  }
+}
+
+function getPagination(query) {
+  const page = Math.max(Number.parseInt(query.page, 10) || 1, 1);
+  const limit = Math.min(Math.max(Number.parseInt(query.limit, 10) || 50, 1), 100);
+
+  return {
+    page,
+    limit,
+    skip: (page - 1) * limit,
+  };
+}
+
+function setPaginationHeaders(res, { page, limit, hasNextPage }) {
+  res.set('X-Pagination-Page', String(page));
+  res.set('X-Pagination-Limit', String(limit));
+  res.set('X-Pagination-Has-Next-Page', String(hasNextPage));
+}
+
+function logApiError(event, error) {
+  console.error({
+    event,
+    error: {
+      name: error?.name || 'Error',
+      code: error?.code || undefined,
+      status: error?.status || undefined,
+    },
+  });
+}
 
 function cleanPatientInput(input = {}, { partial = false } = {}) {
   const cleaned = {};
@@ -27,12 +124,22 @@ function cleanPatientInput(input = {}, { partial = false } = {}) {
     }
   }
 
-  if (Object.hasOwn(input, 'noteCount')) {
-    cleaned.noteCount = Number(input.noteCount) || 0;
+  if (!partial && !cleaned.name) {
+    throw createInputError('Patient name is required.');
   }
 
-  if (!partial && !cleaned.name) {
-    throw new Error('Patient name is required.');
+  validateMaxLengths(cleaned, patientFieldMaxLengths);
+  validateDateField(cleaned, 'dob');
+  validateTimeField(cleaned, 'appointment');
+  validateStatusField(cleaned);
+
+  if (
+    Object.hasOwn(cleaned, 'lastVisit') &&
+    cleaned.lastVisit &&
+    cleaned.lastVisit !== 'New patient' &&
+    !isDateString(cleaned.lastVisit)
+  ) {
+    throw createInputError('lastVisit must use YYYY-MM-DD format or New patient.');
   }
 
   return cleaned;
@@ -109,8 +216,13 @@ function cleanAppointmentInput(input = {}, { partial = false } = {}) {
   }
 
   if (!partial && !cleaned.patientId) {
-    throw new Error('Patient is required.');
+    throw createInputError('Patient is required.');
   }
+
+  validateMaxLengths(cleaned, appointmentFieldMaxLengths);
+  validateDateField(cleaned, 'scheduledDate');
+  validateTimeField(cleaned, 'scheduledTime');
+  validateStatusField(cleaned);
 
   return cleaned;
 }
@@ -174,27 +286,36 @@ async function requireAuth(req, res, next) {
 }
 
 async function buildAppointmentResponse(appointment, doctorId) {
-  const patient = await Patient.findOne({
+  const responses = await buildAppointmentResponses([appointment], doctorId);
+  return responses[0] || { ...appointment, patient: null };
+}
+
+async function buildAppointmentResponses(appointments, doctorId) {
+  const patientIds = [...new Set(appointments.map((appointment) => appointment.patientId))];
+  const patients = await Patient.find({
     doctorId,
-    id: appointment.patientId,
+    id: { $in: patientIds },
+    archivedAt: null,
   })
     .select(patientPublicFields)
     .lean();
+  const patientsById = new Map(patients.map((patient) => [patient.id, patient]));
 
-  return {
+  return appointments.map((appointment) => ({
     ...appointment,
-    patient,
-  };
+    patient: patientsById.get(appointment.patientId) || null,
+  }));
 }
 
 async function refreshPatientNoteCount(doctorId, patientId) {
   const noteCount = await Note.countDocuments({
     doctorId,
     patientId,
+    archivedAt: null,
   });
 
   await Patient.updateOne(
-    { doctorId, id: patientId },
+    { doctorId, id: patientId, archivedAt: null },
     {
       $set: {
         noteCount,
@@ -215,15 +336,17 @@ async function writeAuditLog(doctorId, action, targetType, targetId) {
       targetId,
     });
   } catch (error) {
-    console.error('Failed to write audit log:', error);
+    logApiError('audit_log.write_failed', error);
   }
 }
 
 async function upsertTodayAppointmentForPatient(doctorId, patient) {
   if (!patient.appointment && !patient.reason) return;
 
+  const today = getTodayDateString();
+
   await Appointment.updateOne(
-    { doctorId, patientId: patient.id, scheduledDate: '2026-06-28' },
+    { doctorId, patientId: patient.id, scheduledDate: today, archivedAt: null },
     {
       $set: {
         scheduledTime: patient.appointment || '',
@@ -233,7 +356,7 @@ async function upsertTodayAppointmentForPatient(doctorId, patient) {
       $setOnInsert: {
         doctorId,
         patientId: patient.id,
-        scheduledDate: '2026-06-28',
+        scheduledDate: today,
         id: createAppointmentId(),
       },
     },
@@ -243,7 +366,7 @@ async function upsertTodayAppointmentForPatient(doctorId, patient) {
 
 async function syncPatientVisitFields(doctorId, appointment) {
   await Patient.updateOne(
-    { doctorId, id: appointment.patientId },
+    { doctorId, id: appointment.patientId, archivedAt: null },
     {
       $set: {
         appointment: appointment.scheduledTime || '',
@@ -254,10 +377,22 @@ async function syncPatientVisitFields(doctorId, appointment) {
   );
 }
 
-app.use(cors());
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin || CORS_ORIGINS.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error('Not allowed by CORS'));
+    },
+    exposedHeaders: ['X-Pagination-Page', 'X-Pagination-Limit', 'X-Pagination-Has-Next-Page'],
+  }),
+);
 app.use(express.json());
 
-// Health check used by the web app status panel.
+// API health endpoint.
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
@@ -301,7 +436,7 @@ app.post('/api/auth/register', async (req, res) => {
       return;
     }
 
-    console.error(error);
+    logApiError('auth.register_failed', error);
     res.status(500).json({ error: 'Failed to create account' });
   }
 });
@@ -331,7 +466,7 @@ app.post('/api/auth/login', async (req, res) => {
       return;
     }
 
-    console.error(error);
+    logApiError('auth.login_failed', error);
     res.status(500).json({ error: 'Failed to sign in' });
   }
 });
@@ -345,14 +480,21 @@ app.get('/api/auth/me', (req, res) => {
 // Patient records stored in MongoDB Atlas.
 app.get('/api/patients', async (req, res) => {
   try {
-    const patients = await Patient.find({ doctorId: req.doctor.id })
+    const pagination = getPagination(req.query);
+    const patients = await Patient.find({ doctorId: req.doctor.id, archivedAt: null })
       .select(patientPublicFields)
-      .sort({ appointment: 1 })
+      .sort({ appointment: 1, id: 1 })
+      .skip(pagination.skip)
+      .limit(pagination.limit + 1)
       .lean();
 
-    res.json(patients);
+    setPaginationHeaders(res, {
+      ...pagination,
+      hasNextPage: patients.length > pagination.limit,
+    });
+    res.json(patients.slice(0, pagination.limit));
   } catch (error) {
-    console.error(error);
+    logApiError('patients.list_failed', error);
     res.status(500).json({ error: 'Failed to load patients' });
   }
 });
@@ -362,6 +504,7 @@ app.get('/api/patients/:id', async (req, res) => {
     const patient = await Patient.findOne({
       doctorId: req.doctor.id,
       id: req.params.id,
+      archivedAt: null,
     })
       .select(patientPublicFields)
       .lean();
@@ -373,32 +516,45 @@ app.get('/api/patients/:id', async (req, res) => {
 
     res.json(patient);
   } catch (error) {
-    console.error(error);
+    logApiError('patients.read_failed', error);
     res.status(500).json({ error: 'Failed to load patient' });
   }
 });
 
 app.get('/api/appointments', async (req, res) => {
   try {
+    const pagination = getPagination(req.query);
     const query = {
       doctorId: req.doctor.id,
+      archivedAt: null,
     };
 
     if (req.query.date) {
       query.scheduledDate = String(req.query.date);
     }
 
+    if (req.query.patientId) {
+      query.patientId = String(req.query.patientId);
+    }
+
     const appointments = await Appointment.find(query)
       .select(appointmentPublicFields)
-      .sort({ scheduledDate: -1, scheduledTime: 1 })
+      .sort({ scheduledDate: -1, scheduledTime: 1, id: 1 })
+      .skip(pagination.skip)
+      .limit(pagination.limit + 1)
       .lean();
 
-    const response = await Promise.all(
-      appointments.map((appointment) => buildAppointmentResponse(appointment, req.doctor.id)),
+    const response = await buildAppointmentResponses(
+      appointments.slice(0, pagination.limit),
+      req.doctor.id,
     );
+    setPaginationHeaders(res, {
+      ...pagination,
+      hasNextPage: appointments.length > pagination.limit,
+    });
     res.json(response.filter((appointment) => appointment.patient));
   } catch (error) {
-    console.error(error);
+    logApiError('appointments.list_failed', error);
     res.status(500).json({ error: 'Failed to load appointments' });
   }
 });
@@ -409,6 +565,7 @@ app.post('/api/appointments', async (req, res) => {
     const patient = await Patient.findOne({
       doctorId: req.doctor.id,
       id: payload.patientId,
+      archivedAt: null,
     }).lean();
 
     if (!patient) {
@@ -417,7 +574,7 @@ app.post('/api/appointments', async (req, res) => {
     }
 
     const appointment = await Appointment.create({
-      scheduledDate: '2026-06-28',
+      scheduledDate: getTodayDateString(),
       scheduledTime: '',
       reason: '',
       status: 'Scheduled',
@@ -432,12 +589,12 @@ app.post('/api/appointments', async (req, res) => {
     await syncPatientVisitFields(req.doctor.id, savedAppointment);
     res.status(201).json(await buildAppointmentResponse(savedAppointment, req.doctor.id));
   } catch (error) {
-    if (error.message === 'Patient is required.' || error.name === 'ValidationError') {
+    if (isInputError(error)) {
       res.status(400).json({ error: error.message });
       return;
     }
 
-    console.error(error);
+    logApiError('appointments.create_failed', error);
     res.status(500).json({ error: 'Failed to create appointment' });
   }
 });
@@ -446,7 +603,7 @@ app.patch('/api/appointments/:id', async (req, res) => {
   try {
     const payload = cleanAppointmentInput(req.body, { partial: true });
     const appointment = await Appointment.findOneAndUpdate(
-      { doctorId: req.doctor.id, id: req.params.id },
+      { doctorId: req.doctor.id, id: req.params.id, archivedAt: null },
       { $set: payload },
       { new: true, runValidators: true },
     )
@@ -461,20 +618,22 @@ app.patch('/api/appointments/:id', async (req, res) => {
     await syncPatientVisitFields(req.doctor.id, appointment);
     res.json(await buildAppointmentResponse(appointment, req.doctor.id));
   } catch (error) {
-    if (error.name === 'ValidationError') {
+    if (isInputError(error)) {
       res.status(400).json({ error: error.message });
       return;
     }
 
-    console.error(error);
+    logApiError('appointments.update_failed', error);
     res.status(500).json({ error: 'Failed to update appointment' });
   }
 });
 
 app.get('/api/notes', async (req, res) => {
   try {
+    const pagination = getPagination(req.query);
     const query = {
       doctorId: req.doctor.id,
+      archivedAt: null,
     };
 
     if (req.query.patientId) {
@@ -485,10 +644,19 @@ app.get('/api/notes', async (req, res) => {
       query.appointmentId = String(req.query.appointmentId);
     }
 
-    const notes = await Note.find(query).select(notePublicFields).sort({ createdAt: -1 }).lean();
-    res.json(notes);
+    const notes = await Note.find(query)
+      .select(notePublicFields)
+      .sort({ createdAt: -1, id: 1 })
+      .skip(pagination.skip)
+      .limit(pagination.limit + 1)
+      .lean();
+    setPaginationHeaders(res, {
+      ...pagination,
+      hasNextPage: notes.length > pagination.limit,
+    });
+    res.json(notes.slice(0, pagination.limit));
   } catch (error) {
-    console.error(error);
+    logApiError('notes.list_failed', error);
     res.status(500).json({ error: 'Failed to load notes' });
   }
 });
@@ -499,6 +667,7 @@ app.post('/api/notes', async (req, res) => {
     const patient = await Patient.findOne({
       doctorId: req.doctor.id,
       id: payload.patientId,
+      archivedAt: null,
     }).lean();
 
     if (!patient) {
@@ -511,6 +680,7 @@ app.post('/api/notes', async (req, res) => {
         doctorId: req.doctor.id,
         id: payload.appointmentId,
         patientId: payload.patientId,
+        archivedAt: null,
       }).lean();
 
       if (!appointment) {
@@ -539,7 +709,7 @@ app.post('/api/notes', async (req, res) => {
       return;
     }
 
-    console.error(error);
+    logApiError('notes.create_failed', error);
     res.status(500).json({ error: 'Failed to create note' });
   }
 });
@@ -550,6 +720,7 @@ app.patch('/api/notes/:id', async (req, res) => {
     const existingNote = await Note.findOne({
       doctorId: req.doctor.id,
       id: req.params.id,
+      archivedAt: null,
     }).lean();
 
     if (!existingNote) {
@@ -562,6 +733,7 @@ app.patch('/api/notes/:id', async (req, res) => {
         doctorId: req.doctor.id,
         id: payload.appointmentId,
         patientId: existingNote.patientId,
+        archivedAt: null,
       }).lean();
 
       if (!appointment) {
@@ -573,7 +745,7 @@ app.patch('/api/notes/:id', async (req, res) => {
     delete payload.patientId;
 
     const note = await Note.findOneAndUpdate(
-      { doctorId: req.doctor.id, id: req.params.id },
+      { doctorId: req.doctor.id, id: req.params.id, archivedAt: null },
       { $set: payload },
       { new: true, runValidators: true },
     )
@@ -588,17 +760,26 @@ app.patch('/api/notes/:id', async (req, res) => {
       return;
     }
 
-    console.error(error);
+    logApiError('notes.update_failed', error);
     res.status(500).json({ error: 'Failed to update note' });
   }
 });
 
 app.delete('/api/notes/:id', async (req, res) => {
   try {
-    const note = await Note.findOneAndDelete({
-      doctorId: req.doctor.id,
-      id: req.params.id,
-    })
+    const note = await Note.findOneAndUpdate(
+      {
+        doctorId: req.doctor.id,
+        id: req.params.id,
+        archivedAt: null,
+      },
+      {
+        $set: {
+          archivedAt: new Date(),
+        },
+      },
+      { new: true },
+    )
       .select(notePublicFields)
       .lean();
 
@@ -608,19 +789,22 @@ app.delete('/api/notes/:id', async (req, res) => {
     }
 
     await refreshPatientNoteCount(req.doctor.id, note.patientId);
-    await writeAuditLog(req.doctor.id, 'note.deleted', 'Note', note.id);
-    res.json({ deleted: true, note });
+    await writeAuditLog(req.doctor.id, 'note.archived', 'Note', note.id);
+    res.json({ deleted: true, archived: true, note });
   } catch (error) {
-    console.error(error);
+    logApiError('notes.delete_failed', error);
     res.status(500).json({ error: 'Failed to delete note' });
   }
 });
 
 app.get('/api/patients/:id/timeline', async (req, res) => {
   try {
+    const pagination = getPagination(req.query);
+    const timelineFetchLimit = pagination.skip + pagination.limit + 1;
     const patient = await Patient.findOne({
       doctorId: req.doctor.id,
       id: req.params.id,
+      archivedAt: null,
     })
       .select(patientPublicFields)
       .lean();
@@ -634,14 +818,20 @@ app.get('/api/patients/:id/timeline', async (req, res) => {
       Appointment.find({
         doctorId: req.doctor.id,
         patientId: req.params.id,
+        archivedAt: null,
       })
         .select(appointmentPublicFields)
+        .sort({ scheduledDate: -1, scheduledTime: -1, id: 1 })
+        .limit(timelineFetchLimit)
         .lean(),
       Note.find({
         doctorId: req.doctor.id,
         patientId: req.params.id,
+        archivedAt: null,
       })
         .select(notePublicFields)
+        .sort({ createdAt: -1, id: 1 })
+        .limit(timelineFetchLimit)
         .lean(),
     ]);
 
@@ -671,10 +861,24 @@ app.get('/api/patients/:id/timeline', async (req, res) => {
       const dateB = new Date(`${b.date || ''} ${b.time || ''}`).getTime() || 0;
       return dateB - dateA;
     });
+    const pagedTimeline = timeline.slice(pagination.skip, pagination.skip + pagination.limit);
+    const hasNextPage = timeline.length > pagination.skip + pagination.limit;
 
-    res.json({ patient, timeline });
+    setPaginationHeaders(res, {
+      ...pagination,
+      hasNextPage,
+    });
+    res.json({
+      patient,
+      timeline: pagedTimeline,
+      pagination: {
+        page: pagination.page,
+        limit: pagination.limit,
+        hasNextPage,
+      },
+    });
   } catch (error) {
-    console.error(error);
+    logApiError('patients.timeline_failed', error);
     res.status(500).json({ error: 'Failed to load patient timeline' });
   }
 });
@@ -692,12 +896,12 @@ app.post('/api/patients', async (req, res) => {
     await upsertTodayAppointmentForPatient(req.doctor.id, savedPatient);
     res.status(201).json(savedPatient);
   } catch (error) {
-    if (error.message === 'Patient name is required.' || error.name === 'ValidationError') {
+    if (isInputError(error)) {
       res.status(400).json({ error: error.message });
       return;
     }
 
-    console.error(error);
+    logApiError('patients.create_failed', error);
     res.status(500).json({ error: 'Failed to create patient' });
   }
 });
@@ -706,7 +910,7 @@ app.patch('/api/patients/:id', async (req, res) => {
   try {
     const payload = cleanPatientInput(req.body, { partial: true });
     const patient = await Patient.findOneAndUpdate(
-      { doctorId: req.doctor.id, id: req.params.id },
+      { doctorId: req.doctor.id, id: req.params.id, archivedAt: null },
       { $set: payload },
       { new: true, runValidators: true },
     )
@@ -721,22 +925,32 @@ app.patch('/api/patients/:id', async (req, res) => {
     await upsertTodayAppointmentForPatient(req.doctor.id, patient);
     res.json(patient);
   } catch (error) {
-    if (error.name === 'ValidationError') {
+    if (isInputError(error)) {
       res.status(400).json({ error: error.message });
       return;
     }
 
-    console.error(error);
+    logApiError('patients.update_failed', error);
     res.status(500).json({ error: 'Failed to update patient' });
   }
 });
 
 app.delete('/api/patients/:id', async (req, res) => {
   try {
-    const patient = await Patient.findOneAndDelete({
-      doctorId: req.doctor.id,
-      id: req.params.id,
-    })
+    const archivedAt = new Date();
+    const patient = await Patient.findOneAndUpdate(
+      {
+        doctorId: req.doctor.id,
+        id: req.params.id,
+        archivedAt: null,
+      },
+      {
+        $set: {
+          archivedAt,
+        },
+      },
+      { new: true },
+    )
       .select(patientPublicFields)
       .lean();
 
@@ -745,19 +959,67 @@ app.delete('/api/patients/:id', async (req, res) => {
       return;
     }
 
-    await Appointment.deleteMany({
-      doctorId: req.doctor.id,
-      patientId: req.params.id,
-    });
-    await Note.deleteMany({
-      doctorId: req.doctor.id,
-      patientId: req.params.id,
-    });
-    await writeAuditLog(req.doctor.id, 'patient.deleted', 'Patient', patient.id);
+    const [appointments, notes] = await Promise.all([
+      Appointment.find({
+        doctorId: req.doctor.id,
+        patientId: req.params.id,
+        archivedAt: null,
+      })
+        .select(appointmentPublicFields)
+        .lean(),
+      Note.find({
+        doctorId: req.doctor.id,
+        patientId: req.params.id,
+        archivedAt: null,
+      })
+        .select(notePublicFields)
+        .lean(),
+    ]);
 
-    res.json({ deleted: true, patient });
+    await Promise.all([
+      Appointment.updateMany(
+        {
+          doctorId: req.doctor.id,
+          patientId: req.params.id,
+          archivedAt: null,
+        },
+        {
+          $set: {
+            archivedAt,
+          },
+        },
+      ),
+      Note.updateMany(
+        {
+          doctorId: req.doctor.id,
+          patientId: req.params.id,
+          archivedAt: null,
+        },
+        {
+          $set: {
+            archivedAt,
+          },
+        },
+      ),
+    ]);
+
+    await Promise.all([
+      writeAuditLog(req.doctor.id, 'patient.archived', 'Patient', patient.id),
+      ...appointments.map((appointment) =>
+        writeAuditLog(req.doctor.id, 'appointment.archived', 'Appointment', appointment.id),
+      ),
+      ...notes.map((note) => writeAuditLog(req.doctor.id, 'note.archived', 'Note', note.id)),
+    ]);
+
+    res.json({
+      deleted: true,
+      archived: true,
+      patient,
+      archivedAppointments: appointments.length,
+      archivedNotes: notes.length,
+    });
   } catch (error) {
-    console.error(error);
+    logApiError('patients.delete_failed', error);
     res.status(500).json({ error: 'Failed to delete patient' });
   }
 });
@@ -765,10 +1027,14 @@ app.delete('/api/patients/:id', async (req, res) => {
 connectDatabase()
   .then(() => {
     app.listen(port, () => {
-      console.log(`Clinic AI Copilot API listening on http://localhost:${port}`);
+      console.info({
+        event: 'api.started',
+        service: 'clinic-ai-copilot-api',
+        port,
+      });
     });
   })
   .catch((error) => {
-    console.error('Failed to start API:', error);
+    logApiError('api.start_failed', error);
     process.exit(1);
   });

@@ -1,66 +1,74 @@
 # Clinic AI Copilot
 
-Clinic AI Copilot is a staged training project for building a simple AI-assisted clinic workspace for a single role: the doctor. The system helps a doctor manage patients, medical notes, and AI-assisted summaries while keeping human review in control.
+Clinic AI Copilot is a doctor-facing clinic workspace built as a staged training project. The current app focuses on secure provider access, patient records, visits, notes, and patient timelines backed by MongoDB Atlas.
 
-## Project Status
+## Current Stage
 
-Current stage: Stage 3 - frontend design slice.
+Current stage: Stage 5 - auth and database-backed clinical workflow.
 
-Completed:
+Implemented:
 
-- Stage 0 domain summary
-- Stage 1 development environment check
-- Initial monorepo skeleton
-- React (Vite) doctor dashboard design
-- Express health and patients API
+- React/Vite frontend with the CliniKit-aligned visual direction
+- Provider signup, login, session persistence, and sign out
+- Express API with JWT-protected clinical endpoints
+- MongoDB Atlas storage through Mongoose
+- Patient management with soft archive delete behavior
+- Visits, notes, and patient timeline views
+- Pagination for patients, visits, notes, and timeline endpoints
 
-## Architecture Overview
+Not yet implemented:
 
-```mermaid
-flowchart LR
-    Doctor["Doctor dashboard"] --> Web["React web app (Vite)"]
-    Web --> Api["Express API"]
-    Api --> Postgres["PostgreSQL (later)"]
-    Api --> Mongo["MongoDB (later)"]
-    Api --> Ai["AI summaries (later)"]
-```
+- AI health summaries and semantic search
+- Production deployment pipeline
+- Full role-based access control beyond the doctor role
+
+## Stack
+
+- Package manager: Yarn 4 workspaces
+- Frontend: React, Vite, JavaScript
+- Backend: Node.js, Express, JavaScript
+- Database: MongoDB Atlas with Mongoose
+- Auth: JWT, bcrypt password hashing
+- Styling/assets: app-local CSS and CliniKit visual assets
 
 ## Repository Structure
 
 ```text
 apps/
-  web/                       React (Vite) doctor dashboard
+  web/                       React/Vite frontend
 services/
-  api/                       Express backend (health, patients, AI workflows later)
+  api/                       Express API, auth, MongoDB models, seed script
 packages/
-  shared/                    Shared constants and utilities
+  shared/                    Shared workspace package placeholder
 infra/
-  docker/                    Local Docker assets and compose-related files
-  deployment/                Staging/cloud deployment manifests and notes
-docs/                        Project planning, stage notes, and architecture docs
+  docker/                    Local infrastructure notes/assets
+  deployment/                Deployment notes/assets
+docs/                        Project plan and stage notes
 ```
 
-## Technology Stack
+## Environment Setup
 
-- Language: JavaScript only (no TypeScript)
-- Frontend: React with Vite
-- Backend: Node.js with Express
-- SQL database: PostgreSQL (later stage)
-- NoSQL database: MongoDB (later stage)
-- AI: summarization and semantic search (later stage)
-- Local infrastructure: Docker Compose (later stage)
+Create a local `.env` from `.env.example` and fill in real values before starting the API.
 
-## Local Setup
+Required API values:
 
-Verify the base tools:
-
-```bash
-node -v
-yarn -v
-git --version
-docker --version
-docker compose version
+```env
+MONGO_URL=your_mongodb_atlas_connection_string
+JWT_SECRET=your_local_secret
+CORS_ORIGINS=http://localhost:3000
+DEMO_DOCTOR_EMAIL=doctor@clinikit.local
+DEMO_DOCTOR_PASSWORD=change-this-locally
 ```
+
+Frontend:
+
+```env
+VITE_API_BASE_URL=http://localhost:3001
+```
+
+For local development, the frontend falls back to `http://localhost:3001`. Production builds require `VITE_API_BASE_URL`.
+
+## Startup Flow
 
 Install dependencies:
 
@@ -68,65 +76,42 @@ Install dependencies:
 yarn install
 ```
 
-Run the backend API:
-
-```bash
-yarn api:dev
-```
-
-Run the frontend (in a second terminal):
-
-```bash
-yarn web:dev
-```
-
-Then open:
-
-```text
-http://localhost:3000
-```
-
-The frontend calls the Express API on `http://localhost:3001` by default. Keep
-`yarn api:dev` running while using the web app. To point the frontend at a
-different API host, set `VITE_API_BASE_URL`.
-
-## Environment Variables
-
-Copy `.env.example` to `.env` when local services are introduced.
-
-Never commit real secrets.
-
-The API reads `MONGO_URL` from `.env` and connects to MongoDB Atlas with Mongoose.
-After configuring `MONGO_URL`, seed shared development patients with:
+Seed MongoDB Atlas after `.env` is configured:
 
 ```bash
 yarn api:seed
 ```
 
-The seed command also creates the demo doctor account:
+Start the API:
 
-```text
-doctor@clinikit.local
-clinic-demo-2026
+```bash
+yarn api:dev
 ```
 
-## Development Conventions
+Start the web app in a second terminal:
 
-- Use JavaScript only; do not add TypeScript.
-- Keep the app simple and focused on a single role: doctor.
-- Keep app code in `apps/`.
-- Keep the backend in `services/api`.
-- Keep reusable internal code in `packages/`.
-- Keep Docker and deployment assets in `infra/`.
-- Keep project notes, stage deliverables, and architecture records in `docs/`.
-- Prefer small vertical slices that prove frontend, API, and storage communication before adding complexity.
+```bash
+yarn web:dev
+```
 
-## Current Documentation
+Open:
 
-- [Project plan](docs/PROJECT_PLAN.md)
+```text
+http://localhost:3000
+```
 
-## Known Limitations
+## Useful Scripts
 
-- The frontend and API currently use mock data only.
-- Databases and AI workflows will be introduced in later stages.
-- Docker Compose services have not been defined yet.
+```bash
+yarn web:lint
+yarn api:lint
+yarn lint
+yarn web:build
+```
+
+## Notes
+
+- Do not commit real `.env` secrets.
+- MongoDB Atlas is the shared development database path for this project.
+- Patient delete currently archives patient records and related visits/notes instead of hard-deleting them.
+- `noteCount` is calculated from notes by the API and is not editable in the patient form.

@@ -1,5 +1,11 @@
 // Starter data for shared development. Seed this into MongoDB; the API reads from the database.
 
+function getTodayDateString() {
+  const now = new Date();
+  const localDate = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+  return localDate.toISOString().slice(0, 10);
+}
+
 export const seedPatients = [
   {
     id: 'P-1024',
@@ -47,10 +53,12 @@ export const seedPatients = [
   },
 ];
 
+const today = getTodayDateString();
+
 export const seedAppointments = seedPatients.map((patient) => ({
   id: `A-${patient.id}`,
   patientId: patient.id,
-  scheduledDate: '2026-06-28',
+  scheduledDate: today,
   scheduledTime: patient.appointment,
   reason: patient.reason,
   status: patient.status,

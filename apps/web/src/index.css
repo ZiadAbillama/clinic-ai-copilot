@@ -19,6 +19,8 @@
     minmax(120px, 0.75fr) minmax(90px, 0.55fr);
   --timeline-columns: minmax(140px, 0.85fr) minmax(110px, 0.7fr) minmax(260px, 1.5fr)
     minmax(120px, 0.75fr) minmax(132px, 0.75fr);
+  --notes-columns: minmax(120px, 0.75fr) minmax(280px, 1.5fr) minmax(120px, 0.75fr)
+    minmax(132px, 0.75fr);
 }
 
 * {
@@ -880,6 +882,49 @@ h3 {
   border-color: #fb7185;
 }
 
+.paginationBar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+  padding: 12px 24px;
+  color: var(--muted);
+  background: var(--white);
+  border-top: 1px solid var(--line);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.visitList .paginationBar,
+.timelineList .paginationBar {
+  min-width: 760px;
+  padding: 12px 14px;
+}
+
+.paginationBar div {
+  display: flex;
+  gap: 8px;
+}
+
+.paginationBar button {
+  min-height: 34px;
+  padding: 0 10px;
+  color: var(--ink);
+  background: var(--cyan-faint);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  font-family: 'Noto Sans', Arial, sans-serif;
+  font-weight: 900;
+}
+
+.paginationBar button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
 .sidePanel {
   display: grid;
   align-content: start;
@@ -1012,7 +1057,8 @@ h3 {
 }
 
 .visitTableHeader,
-.timelineTableHeader {
+.timelineTableHeader,
+.notesTableHeader {
   display: grid;
   gap: 14px;
   align-items: center;
@@ -1088,6 +1134,16 @@ h3 {
   grid-template-columns: var(--timeline-columns);
 }
 
+.notesPanel {
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.notesTableHeader {
+  grid-template-columns: var(--notes-columns);
+}
+
 .timelineItem {
   display: grid;
   grid-template-columns: var(--timeline-columns);
@@ -1101,6 +1157,44 @@ h3 {
 
 .timelineItem:last-child {
   border-bottom: 0;
+}
+
+.noteRow {
+  display: grid;
+  grid-template-columns: var(--notes-columns);
+  gap: 14px;
+  align-items: center;
+  min-width: 760px;
+  padding: 12px 14px;
+  background: var(--white);
+  border-bottom: 1px solid var(--line);
+}
+
+.noteRow time,
+.noteRow strong,
+.noteRow span {
+  display: block;
+}
+
+.noteRow time {
+  color: var(--cyan);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.noteRow strong {
+  color: var(--ink);
+  font-weight: 900;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.noteRow span {
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
 }
 
 .timelineItem time,
@@ -1364,12 +1458,18 @@ h3 {
     grid-template-columns: 1fr;
   }
 
-  .timelineItem {
+  .timelineItem,
+  .noteRow {
     grid-template-columns: auto minmax(0, 1fr);
   }
 
   .timelineActions {
     grid-column: 2;
+  }
+
+  .paginationBar {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 

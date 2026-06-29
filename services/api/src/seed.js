@@ -12,8 +12,24 @@ import { Appointment } from './models/Appointment.js';
 import { Doctor } from './models/Doctor.js';
 import { Patient } from './models/Patient.js';
 
+function logSeedError(event, error) {
+  console.error({
+    event,
+    error: {
+      name: error?.name || 'Error',
+      code: error?.code || undefined,
+      status: error?.status || undefined,
+    },
+  });
+}
+
 async function seed() {
   await connectDatabase();
+
+  if (!DEMO_DOCTOR_PASSWORD) {
+    throw new Error('DEMO_DOCTOR_PASSWORD is required to seed the demo doctor.');
+  }
+
   const passwordHash = await bcrypt.hash(DEMO_DOCTOR_PASSWORD, 12);
 
   await Doctor.updateOne(
@@ -47,14 +63,18 @@ async function seed() {
     );
   }
 
-  console.log(`Seeded doctor ${DEMO_DOCTOR_EMAIL}.`);
-  console.log(`Seeded ${seedPatients.length} patients for doctor ${DEMO_DOCTOR_ID}.`);
-  console.log(`Seeded ${seedAppointments.length} appointments for doctor ${DEMO_DOCTOR_ID}.`);
+  console.info({
+    event: 'seed.completed',
+    doctorEmail: DEMO_DOCTOR_EMAIL,
+    doctorId: DEMO_DOCTOR_ID,
+    patients: seedPatients.length,
+    appointments: seedAppointments.length,
+  });
 }
 
 seed()
   .catch((error) => {
-    console.error(error);
+    logSeedError('seed.failed', error);
     process.exitCode = 1;
   })
   .finally(async () => {

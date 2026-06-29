@@ -26,6 +26,11 @@ const noteSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    archivedAt: {
+      type: Date,
+      default: null,
+      index: true,
+    },
   },
   {
     timestamps: true,
@@ -34,6 +39,9 @@ const noteSchema = new mongoose.Schema(
 
 noteSchema.index({ doctorId: 1, id: 1 }, { unique: true });
 noteSchema.index({ doctorId: 1, patientId: 1, createdAt: -1 });
+noteSchema.index({ doctorId: 1, archivedAt: 1, createdAt: -1, id: 1 });
+noteSchema.index({ doctorId: 1, patientId: 1, archivedAt: 1, createdAt: -1, id: 1 });
+noteSchema.index({ doctorId: 1, appointmentId: 1, archivedAt: 1, createdAt: -1, id: 1 });
 noteSchema.index({ text: 'text' });
 
 export const Note = mongoose.models.Note || mongoose.model('Note', noteSchema);

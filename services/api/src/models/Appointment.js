@@ -1,4 +1,11 @@
 import mongoose from 'mongoose';
+import { visitStatuses } from '../statuses.js';
+
+function getTodayDateString() {
+  const now = new Date();
+  const localDate = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+  return localDate.toISOString().slice(0, 10);
+}
 
 const appointmentSchema = new mongoose.Schema(
   {
@@ -18,7 +25,7 @@ const appointmentSchema = new mongoose.Schema(
     },
     scheduledDate: {
       type: String,
-      default: '2026-06-28',
+      default: getTodayDateString,
     },
     scheduledTime: {
       type: String,
@@ -32,6 +39,12 @@ const appointmentSchema = new mongoose.Schema(
     status: {
       type: String,
       default: 'Scheduled',
+      enum: visitStatuses,
+    },
+    archivedAt: {
+      type: Date,
+      default: null,
+      index: true,
     },
   },
   {
@@ -41,6 +54,21 @@ const appointmentSchema = new mongoose.Schema(
 
 appointmentSchema.index({ doctorId: 1, id: 1 }, { unique: true });
 appointmentSchema.index({ doctorId: 1, scheduledDate: 1, scheduledTime: 1 });
+appointmentSchema.index({
+  doctorId: 1,
+  archivedAt: 1,
+  scheduledDate: -1,
+  scheduledTime: 1,
+  id: 1,
+});
+appointmentSchema.index({
+  doctorId: 1,
+  patientId: 1,
+  archivedAt: 1,
+  scheduledDate: -1,
+  scheduledTime: -1,
+  id: 1,
+});
 
 export const Appointment =
   mongoose.models.Appointment || mongoose.model('Appointment', appointmentSchema);
