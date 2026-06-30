@@ -13,6 +13,8 @@
   --section: #f5fbfe;
   --white: #ffffff;
   --shadow: 0 20px 58px rgba(2, 5, 27, 0.14);
+  --appointment-columns: minmax(76px, 0.52fr) minmax(170px, 1.05fr) minmax(170px, 1fr)
+    minmax(190px, 1.2fr) minmax(110px, 0.68fr) minmax(150px, 0.85fr);
   --patient-columns: minmax(210px, 1.35fr) minmax(118px, 0.8fr) minmax(132px, 0.9fr)
     minmax(100px, 0.75fr) minmax(58px, 0.45fr) minmax(106px, 0.72fr) minmax(110px, 0.7fr);
   --visit-columns: minmax(150px, 0.9fr) minmax(220px, 1.4fr) minmax(110px, 0.7fr)
@@ -613,6 +615,7 @@ h3 {
   padding: clamp(56px, 8vw, 96px) clamp(18px, 5vw, 72px) clamp(72px, 8vw, 112px);
 }
 
+.appointmentPanel,
 .patientPanel,
 .detailCard,
 .formCard {
@@ -622,6 +625,7 @@ h3 {
   box-shadow: none;
 }
 
+.appointmentPanel,
 .patientPanel {
   overflow: hidden;
 }
@@ -710,12 +714,101 @@ h3 {
 
 .panelActions button:hover,
 .formHeader button:hover,
+.appointmentRow button:hover,
 .visitPanelHeader button:hover,
 .timelineHeader button:hover,
 .recordActions button:hover,
 .visitRow button:hover,
 .formActions button:hover {
   border-color: var(--cyan);
+}
+
+.appointmentList {
+  display: grid;
+  overflow-x: auto;
+}
+
+.appointmentTableHeader {
+  display: grid;
+  grid-template-columns: var(--appointment-columns);
+  gap: 14px;
+  align-items: center;
+  min-width: 940px;
+  padding: 12px 24px;
+  color: #44474c;
+  background: #e7ecf6;
+  border-bottom: 1px solid var(--line);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.appointmentRow {
+  display: grid;
+  grid-template-columns: var(--appointment-columns);
+  gap: 14px;
+  align-items: center;
+  min-width: 940px;
+  padding: 12px 24px;
+  background: var(--white);
+  border-bottom: 1px solid var(--line);
+}
+
+.appointmentRow:last-child {
+  border-bottom: 0;
+}
+
+.appointmentRow:hover {
+  background: #fbfdff;
+}
+
+.appointmentRow time {
+  color: var(--cyan);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.appointmentRow strong,
+.appointmentRow span,
+.appointmentRow small {
+  display: block;
+}
+
+.appointmentRow strong {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.appointmentRow span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.appointmentRow small {
+  margin-top: 4px;
+  color: #828894;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+}
+
+.appointmentRow button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 12px;
+  color: var(--ink);
+  background: var(--cyan-faint);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 900;
 }
 
 .patientList {
@@ -935,6 +1028,147 @@ h3 {
   display: grid;
   align-content: start;
   gap: clamp(22px, 3vw, 34px);
+}
+
+.appointmentPage {
+  display: grid;
+  gap: 18px;
+  padding: 24px;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
+.appointmentPageHeader,
+.appointmentContextHeader {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.appointmentPageHeader button,
+.appointmentContextHeader button,
+.appointmentNoteActions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 0 14px;
+  color: var(--ink);
+  background: var(--cyan-faint);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 900;
+}
+
+.appointmentPageHeader button:hover,
+.appointmentContextHeader button:hover,
+.appointmentNoteActions button:hover {
+  border-color: var(--cyan);
+}
+
+.appointmentContextPanel,
+.previousVisitsPanel,
+.clinicalNotePanel {
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.appointmentInfoGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 18px 0 0;
+}
+
+.appointmentInfoGrid div {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.appointmentInfoGrid dt,
+.appointmentReasonBlock span,
+.clinicalNotePanel label > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.appointmentInfoGrid dd {
+  margin: 8px 0 0;
+  color: var(--ink);
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+
+.appointmentReasonBlock {
+  display: grid;
+  gap: 6px;
+  margin-top: 18px;
+  padding: 14px 0 0;
+  border-top: 1px solid var(--line);
+}
+
+.appointmentReasonBlock strong {
+  color: var(--ink);
+  font-family: 'Figtree', Arial, sans-serif;
+  font-size: 22px;
+  font-weight: 900;
+  line-height: 1.1;
+}
+
+.appointmentReasonBlock small {
+  color: var(--muted);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.clinicalNotePanel {
+  display: grid;
+  gap: 14px;
+}
+
+.clinicalNotePanel label {
+  display: grid;
+  gap: 8px;
+}
+
+.clinicalNotePanel textarea {
+  width: 100%;
+  min-height: 260px;
+  padding: 14px;
+  color: var(--ink);
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  line-height: 1.55;
+  resize: vertical;
+}
+
+.clinicalNotePanel textarea:focus {
+  outline: 4px solid rgba(18, 184, 232, 0.22);
+  border-color: var(--cyan);
+}
+
+.appointmentNoteActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.appointmentNoteActions .primaryButton {
+  min-width: 160px;
+}
+
+.appointmentNoteActions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
 }
 
 .detailCard,
@@ -1383,9 +1617,28 @@ h3 {
 }
 
 @media (max-width: 1100px) {
+  .appointmentList,
   .visitList,
   .timelineList {
     overflow-x: visible;
+  }
+
+  .appointmentTableHeader {
+    display: none;
+  }
+
+  .appointmentRow {
+    grid-template-columns: minmax(76px, 0.45fr) minmax(160px, 0.95fr) minmax(180px, 1fr) minmax(
+        150px,
+        0.85fr
+      );
+    min-width: 0;
+    width: 100%;
+  }
+
+  .appointmentRow > span,
+  .appointmentRow > .statusPill {
+    display: none !important;
   }
 
   .visitToolbar,
@@ -1449,6 +1702,10 @@ h3 {
 }
 
 @media (max-width: 900px) {
+  .appointmentInfoGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .patientList,
   .visitList,
   .timelineList {
@@ -1618,6 +1875,29 @@ h3 {
   .authPanel {
     width: 100%;
     padding: 24px;
+  }
+
+  .appointmentPage {
+    padding: 18px;
+  }
+
+  .appointmentPageHeader,
+  .appointmentContextHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .appointmentInfoGrid,
+  .appointmentRow {
+    grid-template-columns: 1fr;
+  }
+
+  .appointmentNoteActions {
+    justify-content: stretch;
+  }
+
+  .appointmentNoteActions button {
+    flex: 1 1 180px;
   }
 
   .panelHeader {

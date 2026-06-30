@@ -19,6 +19,7 @@ if (import.meta.env.PROD && !configuredApiBaseUrl) {
 
 const apiBaseUrl = configuredApiBaseUrl || 'http://localhost:3001';
 const patientPageLimit = 10;
+const appointmentPageLimit = 8;
 const detailPageLimit = 5;
 const visitStatuses = Object.freeze([
   'Scheduled',
@@ -35,11 +36,11 @@ function getTodayDateString() {
   return localDate.toISOString().slice(0, 10);
 }
 
-function formatDobWithAge(dob) {
-  if (!dob) return 'DOB: Not set';
+function calculateAge(dob) {
+  if (!dob) return null;
 
   const birthDate = new Date(`${dob}T00:00:00`);
-  if (Number.isNaN(birthDate.getTime())) return `DOB: ${dob}`;
+  if (Number.isNaN(birthDate.getTime())) return null;
 
   const today = new Date();
   let age = today.getFullYear() - birthDate.getFullYear();
@@ -49,7 +50,21 @@ function formatDobWithAge(dob) {
 
   if (!hasBirthdayPassed) age -= 1;
 
+  return age;
+}
+
+function formatDobWithAge(dob) {
+  if (!dob) return 'DOB: Not set';
+
+  const age = calculateAge(dob);
+  if (age === null) return `DOB: ${dob}`;
+
   return `DOB: ${dob} (${age}y)`;
+}
+
+function formatAge(dob) {
+  const age = calculateAge(dob);
+  return age === null ? 'Not set' : `${age}y`;
 }
 
 const emptyPatientForm = {
@@ -151,6 +166,13 @@ export default function App() {
   const [patientsError, setPatientsError] = useState('');
   const [patientsPage, setPatientsPage] = useState(1);
   const [patientsPagination, setPatientsPagination] = useState(createPagination(patientPageLimit));
+  const [todayAppointments, setTodayAppointments] = useState([]);
+  const [todayAppointmentsState, setTodayAppointmentsState] = useState('Loading');
+  const [todayAppointmentsError, setTodayAppointmentsError] = useState('');
+  const [todayAppointmentsPage, setTodayAppointmentsPage] = useState(1);
+  const [todayAppointmentsPagination, setTodayAppointmentsPagination] = useState(
+    createPagination(appointmentPageLimit),
+  );
   const [appointments, setAppointments] = useState([]);
   const [appointmentsState, setAppointmentsState] = useState('Loading');
   const [appointmentsError, setAppointmentsError] = useState('');
@@ -178,6 +200,12 @@ export default function App() {
   const [visitsOpen, setVisitsOpen] = useState(false);
   const [editingAppointmentId, setEditingAppointmentId] = useState('');
   const [archivingAppointmentId, setArchivingAppointmentId] = useState('');
+  const [activeAppointment, setActiveAppointment] = useState(null);
+  const [appointmentNote, setAppointmentNote] = useState(null);
+  const [appointmentNoteText, setAppointmentNoteText] = useState('');
+  const [appointmentNoteStatus, setAppointmentNoteStatus] = useState('Idle');
+  const [appointmentNoteError, setAppointmentNoteError] = useState('');
+  const [previousVisitsOpen, setPreviousVisitsOpen] = useState(false);
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [timeline, setTimeline] = useState([]);
   const [timelineState, setTimelineState] = useState('Idle');
@@ -197,12 +225,17 @@ export default function App() {
     setAuthToken('');
     setDoctor(null);
     setPatients([]);
+    setTodayAppointments([]);
     setAppointments([]);
     setTimeline([]);
+    setActiveAppointment(null);
+    setAppointmentNote(null);
+    setAppointmentNoteText('');
     setSelectedPatientId('');
     setSelectedPatient(null);
     setAuthStatus('Idle');
     setPatientsPage(1);
+    setTodayAppointmentsPage(1);
     setAppointmentsPage(1);
     setTimelinePage(1);
   }, []);
@@ -271,6 +304,51 @@ export default function App() {
       });
     },
     [apiFetch, authToken, patientsPage],
+  );
+
+  const loadTodayAppointments = useCallback(
+    (page = todayAppointmentsPage) => {
+      if (!authToken) {
+        setTodayAppointments([]);
+        setTodayAppointmentsPagination(createPagination(appointmentPageLimit));
+        setTodayAppointmentsState('Idle');
+        return Promise.resolve([]);
+      }
+
+      setTodayAppointmentsState('Loading');
+      setTodayAppointmentsError('');
+
+      return apiFetch(
+        `/api/appointments?${buildQuery({
+          date: getTodayDateString(),
+          page,
+          limit: appointmentPageLimit,
+        })}`,
+      )
+        .then(async (res) => {
+          if (!res.ok) throw res;
+
+          return {
+            data: await res.json(),
+            pagination: paginationFromResponse(res, page, appointmentPageLimit),
+          };
+        })
+        .then(({ data, pagination }) => {
+          setTodayAppointments(data);
+          setTodayAppointmentsPagination(pagination);
+          setTodayAppointmentsState('Loaded');
+          setTodayAppointmentsError('');
+          return data;
+        })
+        .catch(() => {
+          setTodayAppointments([]);
+          setTodayAppointmentsPagination(createPagination(appointmentPageLimit));
+          setTodayAppointmentsState('Offline');
+          setTodayAppointmentsError('Today appointments are unavailable. Check the API.');
+          return [];
+        });
+    },
+    [apiFetch, authToken, todayAppointmentsPage],
   );
 
   const setFormFromPatient = useCallback((patient) => {
@@ -422,6 +500,14 @@ export default function App() {
     setPatientsPage((currentPage) => currentPage + 1);
   }
 
+  function previousTodayAppointmentsPage() {
+    setTodayAppointmentsPage((currentPage) => Math.max(currentPage - 1, 1));
+  }
+
+  function nextTodayAppointmentsPage() {
+    setTodayAppointmentsPage((currentPage) => currentPage + 1);
+  }
+
   function previousAppointmentsPage() {
     setAppointmentsPage((currentPage) => Math.max(currentPage - 1, 1));
   }
@@ -458,6 +544,36 @@ export default function App() {
       ...currentForm,
       [name]: value,
     }));
+  }
+
+  function openAppointment(appointment) {
+    if (!appointment) return;
+
+    setActiveAppointment(appointment);
+    setSelectedPatientId(appointment.patientId);
+    setSelectedPatient(appointment.patient || null);
+    setSelectedPatientState(appointment.patient ? 'Loaded' : 'Idle');
+    setAppointmentNote(null);
+    setAppointmentNoteText('');
+    setAppointmentNoteStatus('Loading');
+    setAppointmentNoteError('');
+    setPreviousVisitsOpen(false);
+    setVisitsOpen(false);
+    setTimelineOpen(false);
+    closeAppointmentForm();
+    closeNoteForm();
+    window.setTimeout(() => {
+      document.getElementById('appointment-workspace')?.scrollIntoView({ block: 'start' });
+    }, 0);
+  }
+
+  function closeAppointmentWorkspace() {
+    setActiveAppointment(null);
+    setAppointmentNote(null);
+    setAppointmentNoteText('');
+    setAppointmentNoteStatus('Idle');
+    setAppointmentNoteError('');
+    setPreviousVisitsOpen(false);
   }
 
   const loadTimeline = useCallback(
@@ -497,6 +613,42 @@ export default function App() {
         });
     },
     [apiFetch, selectedPatientId, timelinePage],
+  );
+
+  const loadAppointmentNote = useCallback(
+    (appointment = activeAppointment) => {
+      if (!appointment || !authToken) return Promise.resolve(null);
+
+      setAppointmentNoteStatus('Loading');
+      setAppointmentNoteError('');
+
+      return apiFetch(
+        `/api/notes?${buildQuery({
+          patientId: appointment.patientId,
+          appointmentId: appointment.id,
+          page: 1,
+          limit: 1,
+        })}`,
+      )
+        .then(async (res) => {
+          if (!res.ok) throw res;
+          return res.json();
+        })
+        .then((notes) => {
+          const note = notes[0] || null;
+          setAppointmentNote(note);
+          setAppointmentNoteText(note?.text || '');
+          setAppointmentNoteStatus(note ? 'Saved' : 'Idle');
+          return note;
+        })
+        .catch(() => {
+          setAppointmentNote(null);
+          setAppointmentNoteStatus('Error');
+          setAppointmentNoteError('Could not load the appointment note.');
+          return null;
+        });
+    },
+    [activeAppointment, apiFetch, authToken],
   );
 
   function toggleTimeline() {
@@ -733,6 +885,64 @@ export default function App() {
       });
   }
 
+  function handleAppointmentNoteSubmit(event) {
+    event.preventDefault();
+    if (!activeAppointment) return;
+
+    const text = appointmentNoteText.trim();
+    if (!text) {
+      setAppointmentNoteError('Write a clinical note before saving.');
+      return;
+    }
+
+    const isEditing = Boolean(appointmentNote?.id);
+    const url = isEditing ? `/api/notes/${encodeURIComponent(appointmentNote.id)}` : '/api/notes';
+
+    setAppointmentNoteStatus('Saving');
+    setAppointmentNoteError('');
+
+    apiFetch(url, {
+      method: isEditing ? 'PATCH' : 'POST',
+      body: JSON.stringify({
+        patientId: activeAppointment.patientId,
+        appointmentId: activeAppointment.id,
+        text,
+      }),
+    })
+      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
+      .then((note) => {
+        setAppointmentNote(note);
+        setAppointmentNoteText(note.text || text);
+        setAppointmentNoteStatus('Saved');
+        setNotice({
+          tone: 'success',
+          title: 'Clinical note saved',
+          text: `${activeAppointment.patient?.name || 'Patient'} note is ready for AI review.`,
+        });
+        return Promise.all([
+          loadTimeline(activeAppointment.patientId, 1),
+          refreshWorkspace(activeAppointment.patientId),
+        ]);
+      })
+      .catch(() => {
+        setAppointmentNoteStatus('Error');
+        setAppointmentNoteError('Could not save the clinical note. Check the API and try again.');
+      });
+  }
+
+  function handleGenerateAiSummary() {
+    if (!appointmentNote) {
+      setAppointmentNoteError('Save the clinical note before generating an AI summary.');
+      return;
+    }
+
+    setNotice({
+      tone: 'success',
+      title: 'AI summary is next',
+      text: 'The note is saved. The Ollama summary and doctor review panel come next.',
+    });
+  }
+
   function handleAuthChange(event) {
     const { name, value } = event.target;
     setAuthForm((currentForm) => ({
@@ -852,8 +1062,18 @@ export default function App() {
   }, [refreshWorkspace]);
 
   useEffect(() => {
+    loadTodayAppointments();
+  }, [loadTodayAppointments]);
+
+  useEffect(() => {
     loadAppointments();
   }, [loadAppointments]);
+
+  useEffect(() => {
+    if (!activeAppointment) return;
+
+    loadAppointmentNote(activeAppointment);
+  }, [activeAppointment, loadAppointmentNote]);
 
   useEffect(() => {
     if (!timelineOpen) return;
@@ -1193,8 +1413,8 @@ export default function App() {
         </div>
       )}
 
-      <a className="skipLink" href="#patients">
-        Skip to patient list
+      <a className="skipLink" href="#appointments">
+        Skip to appointments
       </a>
 
       <header className="topBar">
@@ -1224,479 +1444,689 @@ export default function App() {
         <div className="overviewCopy">
           <p className="eyebrow">Doctor workspace</p>
           <h1 id="overview-title">Clinic AI Copilot</h1>
-          <p>Review today&apos;s visits and update patient records.</p>
+          <p>Open today&apos;s appointments, write the note, then bring in AI when ready.</p>
         </div>
       </section>
 
       <section className="workspace" aria-label="Doctor workspace">
-        <div className="patientPanel" id="patients">
-          <div className="panelHeader">
-            <div>
-              <p className="eyebrow">Records</p>
-              <h2>Patients</h2>
+        {activeAppointment ? (
+          <section
+            className="appointmentPage"
+            id="appointment-workspace"
+            aria-labelledby="appointment-workspace-title"
+          >
+            <div className="appointmentPageHeader">
+              <button type="button" onClick={closeAppointmentWorkspace}>
+                Back to appointments
+              </button>
+              <span className="statusPill">{activeAppointment.status}</span>
             </div>
-            <div className="panelActions">
-              <label className="patientSearch">
-                <span>Search patients</span>
-                <input
-                  value={patientSearch}
-                  onChange={(event) => setPatientSearch(event.target.value)}
-                  placeholder="Search patients..."
-                  type="search"
+
+            <section className="appointmentContextPanel">
+              <div className="appointmentContextHeader">
+                <div>
+                  <p className="eyebrow">Appointment</p>
+                  <h2 id="appointment-workspace-title">
+                    {activeAppointment.patient?.name || 'Patient appointment'}
+                  </h2>
+                </div>
+                <button type="button" onClick={() => setPreviousVisitsOpen((current) => !current)}>
+                  {previousVisitsOpen ? 'Hide previous visits' : 'Previous visits'}
+                </button>
+              </div>
+
+              <dl className="appointmentInfoGrid">
+                <div>
+                  <dt>Age</dt>
+                  <dd>{formatAge(activeAppointment.patient?.dob)}</dd>
+                </div>
+                <div>
+                  <dt>Gender</dt>
+                  <dd>{activeAppointment.patient?.gender || 'Not recorded'}</dd>
+                </div>
+                <div>
+                  <dt>Patient ID</dt>
+                  <dd>{activeAppointment.patientId}</dd>
+                </div>
+                <div>
+                  <dt>Contact</dt>
+                  <dd>{activeAppointment.patient?.contact || 'No contact'}</dd>
+                </div>
+              </dl>
+
+              <div className="appointmentReasonBlock">
+                <span>Reason</span>
+                <strong>{activeAppointment.reason || 'No reason recorded'}</strong>
+                <small>
+                  {activeAppointment.scheduledDate} {activeAppointment.scheduledTime || ''}
+                </small>
+              </div>
+            </section>
+
+            {previousVisitsOpen && (
+              <section className="previousVisitsPanel" aria-labelledby="previous-visits-title">
+                <div className="timelineHeader">
+                  <div>
+                    <p className="eyebrow">History</p>
+                    <h3 id="previous-visits-title">Previous visits</h3>
+                  </div>
+                </div>
+                <div className="visitList">
+                  <div className="visitTableHeader" aria-hidden="true">
+                    <span>Date / time</span>
+                    <span>Reason</span>
+                    <span>Type</span>
+                    <span>Status</span>
+                    <span>Actions</span>
+                  </div>
+                  {selectedPatientVisits.length === 0 && (
+                    <p className="visitEmptyState">No previous visits found.</p>
+                  )}
+                  {selectedPatientVisits.map((visit) => {
+                    const visitDateTime = visit.scheduledTime
+                      ? `${visit.scheduledDate}T${visit.scheduledTime}`
+                      : visit.scheduledDate;
+                    const isCurrentVisit = visit.id === activeAppointment.id;
+
+                    return (
+                      <article className="visitRow" key={visit.id}>
+                        <div className="visitDateCell">
+                          <time dateTime={visitDateTime}>
+                            {visit.scheduledDate} {visit.scheduledTime}
+                          </time>
+                        </div>
+                        <strong>{visit.reason || 'No reason'}</strong>
+                        <span>{isCurrentVisit ? 'Current' : 'Previous'}</span>
+                        <span className="statusPill">{visit.status}</span>
+                        <span>{isCurrentVisit ? 'Open now' : 'History'}</span>
+                      </article>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
+
+            <form className="clinicalNotePanel" onSubmit={handleAppointmentNoteSubmit}>
+              <label>
+                <span>Doctor note</span>
+                <textarea
+                  value={appointmentNoteText}
+                  onChange={(event) => {
+                    setAppointmentNoteText(event.target.value);
+                    setAppointmentNoteError('');
+                    if (appointmentNoteStatus === 'Saved') setAppointmentNoteStatus('Editing');
+                  }}
+                  placeholder="Write clinical note here..."
+                  rows={12}
                 />
               </label>
-              <button type="button" onClick={startNewPatient}>
-                <Plus size={16} />
-                Add patient
-              </button>
-              <button type="button" onClick={() => setManageMode((currentMode) => !currentMode)}>
-                {manageMode ? <X size={16} /> : <Pencil size={16} />}
-                {manageMode ? 'Done' : 'Edit'}
-              </button>
-            </div>
-          </div>
 
-          <div className="patientList">
-            <div className="patientTableHeader" aria-hidden="true">
-              <span>Patient name</span>
-              <span>DOB / age</span>
-              <span>Contact</span>
-              <span>Last visit</span>
-              <span>Notes</span>
-              <span>Status</span>
-              <span>Actions</span>
-            </div>
+              {appointmentNoteError && <p className="formMessage error">{appointmentNoteError}</p>}
 
-            {patientsState === 'Loading' && <p className="patientMessage">Loading patients...</p>}
-
-            {patientsError && <p className="patientMessage error">{patientsError}</p>}
-            {appointmentsError && <p className="patientMessage error">{appointmentsError}</p>}
-
-            {patientsState === 'Loaded' && patients.length === 0 && (
-              <p className="patientMessage">No patients found.</p>
-            )}
-
-            {patientsState === 'Loaded' && patients.length > 0 && filteredPatients.length === 0 && (
-              <p className="patientMessage">No patients match that search.</p>
-            )}
-
-            {filteredPatients.map((patient) => (
-              <article
-                className={patient.id === selectedPatientId ? 'patientRow selected' : 'patientRow'}
-                key={patient.id}
-              >
+              <div className="appointmentNoteActions">
                 <button
-                  className="patientSelect"
-                  type="button"
-                  aria-pressed={patient.id === selectedPatientId}
-                  onClick={() => selectPatient(patient.id)}
+                  className="primaryButton"
+                  disabled={appointmentNoteStatus === 'Saving'}
+                  type="submit"
                 >
-                  <div className="patientIdentity">
-                    <span className="patientAvatar" aria-hidden="true">
-                      {patient.name
-                        .split(' ')
-                        .map((part) => part[0])
-                        .join('')
-                        .slice(0, 2)}
-                    </span>
-                    <span>
-                      <strong>{patient.name}</strong>
-                      <small>ID: {patient.id}</small>
-                      <small className="mobilePatientMeta">{formatDobWithAge(patient.dob)}</small>
-                    </span>
-                  </div>
-                  <div className="patientField" data-label="DOB">
-                    <span>{patient.dob || 'Not set'}</span>
-                    <small>
-                      {patient.lastVisit === 'New patient' ? 'New patient' : 'Patient file'}
-                    </small>
-                  </div>
-                  <span className="patientField" data-label="Contact">
-                    {patient.contact || 'No contact'}
-                  </span>
-                  <span className="patientField" data-label="Last visit">
-                    {patient.lastVisit || 'None'}
-                  </span>
-                  <span className="patientField" data-label="Notes">
-                    {patient.noteCount}
-                  </span>
-                  <span className="patientField patientStatusField" data-label="Status">
-                    <span className="statusPill">{patient.status || 'Scheduled'}</span>
-                  </span>
+                  {appointmentNoteStatus === 'Saving' ? 'Saving note...' : 'Save doctor note'}
                 </button>
-
-                <div className="patientRowActions" aria-label={`Manage ${patient.name}`}>
-                  {manageMode ? (
-                    <>
-                      <button type="button" onClick={() => startEditingPatient(patient)}>
-                        <Pencil size={16} />
-                        <span>Modify</span>
-                      </button>
-                      <button
-                        className="deleteRowButton"
-                        type="button"
-                        onClick={() => handleDeletePatient(patient)}
-                      >
-                        <Trash2 size={16} />
-                        <span>Delete</span>
-                      </button>
-                    </>
-                  ) : (
-                    <button type="button" onClick={() => selectPatient(patient.id)}>
-                      View
-                    </button>
-                  )}
-                </div>
-              </article>
-            ))}
-          </div>
-          <PaginationControls
-            disabled={patientsState === 'Loading'}
-            label="Patients"
-            pagination={patientsPagination}
-            onPrevious={previousPatientsPage}
-            onNext={nextPatientsPage}
-          />
-        </div>
-
-        <aside className="sidePanel">
-          {formMode === 'edit' ? (
-            patientFormSection
-          ) : (
-            <section className="detailCard" aria-labelledby="patient-detail-title">
-              <div className="iconBox">
-                <HeartPulse size={20} />
+                <button
+                  type="button"
+                  disabled={!appointmentNote || appointmentNoteStatus === 'Saving'}
+                  onClick={handleGenerateAiSummary}
+                >
+                  Generate AI Summary
+                </button>
               </div>
-              <p className="eyebrow">Patient file</p>
-              <h2 id="patient-detail-title">{selectedPatient?.name || 'Select a patient'}</h2>
+            </form>
+          </section>
+        ) : (
+          <>
+            <div className="appointmentPanel" id="appointments">
+              <div className="panelHeader">
+                <div>
+                  <p className="eyebrow">Appointments</p>
+                  <h2>Today</h2>
+                </div>
+                <span>{getTodayDateString()}</span>
+              </div>
 
-              {selectedPatientState === 'Loading' && (
-                <p className="detailMessage">Loading patient details...</p>
-              )}
+              <div className="appointmentList">
+                <div className="appointmentTableHeader" aria-hidden="true">
+                  <span>Time</span>
+                  <span>Patient</span>
+                  <span>Patient info</span>
+                  <span>Reason</span>
+                  <span>Status</span>
+                  <span>Action</span>
+                </div>
 
-              {selectedPatientError && (
-                <p className="detailMessage error">{selectedPatientError}</p>
-              )}
+                {todayAppointmentsState === 'Loading' && (
+                  <p className="patientMessage">Loading today&apos;s appointments...</p>
+                )}
 
-              {selectedPatientState === 'Loaded' && selectedPatient && (
-                <>
-                  <dl className="detailGrid">
-                    <div>
-                      <dt>Date of birth</dt>
-                      <dd>{selectedPatient.dob || 'Not set'}</dd>
-                    </div>
-                    <div>
-                      <dt>Contact</dt>
-                      <dd>{selectedPatient.contact || 'No contact'}</dd>
-                    </div>
-                  </dl>
+                {todayAppointmentsError && (
+                  <p className="patientMessage error">{todayAppointmentsError}</p>
+                )}
 
-                  <div className="recordActions">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setVisitsOpen((current) => !current);
-                        setTimelineOpen(false);
-                        closeNoteForm();
-                      }}
+                {todayAppointmentsState === 'Loaded' && todayAppointments.length === 0 && (
+                  <p className="patientMessage">No appointments scheduled for today.</p>
+                )}
+
+                {todayAppointments.map((appointment) => (
+                  <article className="appointmentRow" key={appointment.id}>
+                    <time
+                      dateTime={`${appointment.scheduledDate}T${appointment.scheduledTime || '00:00'}`}
                     >
-                      {visitsOpen ? 'Hide visits' : 'View visits'}
+                      {appointment.scheduledTime || 'No time'}
+                    </time>
+                    <div>
+                      <strong>{appointment.patient?.name || 'Unknown patient'}</strong>
+                      <small>ID: {appointment.patientId}</small>
+                    </div>
+                    <span>{formatDobWithAge(appointment.patient?.dob)}</span>
+                    <strong>{appointment.reason || 'No reason'}</strong>
+                    <span className="statusPill">{appointment.status}</span>
+                    <button type="button" onClick={() => openAppointment(appointment)}>
+                      Open appointment
                     </button>
-                    <button type="button" onClick={toggleTimeline}>
-                      {timelineOpen ? 'Hide timeline' : 'View timeline'}
+                  </article>
+                ))}
+              </div>
+
+              <PaginationControls
+                disabled={todayAppointmentsState === 'Loading'}
+                label="Appointments"
+                pagination={todayAppointmentsPagination}
+                onPrevious={previousTodayAppointmentsPage}
+                onNext={nextTodayAppointmentsPage}
+              />
+            </div>
+
+            <div className="patientPanel" id="patients">
+              <div className="panelHeader">
+                <div>
+                  <p className="eyebrow">Records</p>
+                  <h2>Patients</h2>
+                </div>
+                <div className="panelActions">
+                  <label className="patientSearch">
+                    <span>Search patients</span>
+                    <input
+                      value={patientSearch}
+                      onChange={(event) => setPatientSearch(event.target.value)}
+                      placeholder="Search patients..."
+                      type="search"
+                    />
+                  </label>
+                  <button type="button" onClick={startNewPatient}>
+                    <Plus size={16} />
+                    Add patient
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setManageMode((currentMode) => !currentMode)}
+                  >
+                    {manageMode ? <X size={16} /> : <Pencil size={16} />}
+                    {manageMode ? 'Done' : 'Edit'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="patientList">
+                <div className="patientTableHeader" aria-hidden="true">
+                  <span>Patient name</span>
+                  <span>DOB / age</span>
+                  <span>Contact</span>
+                  <span>Last visit</span>
+                  <span>Notes</span>
+                  <span>Status</span>
+                  <span>Actions</span>
+                </div>
+
+                {patientsState === 'Loading' && (
+                  <p className="patientMessage">Loading patients...</p>
+                )}
+
+                {patientsError && <p className="patientMessage error">{patientsError}</p>}
+                {appointmentsError && <p className="patientMessage error">{appointmentsError}</p>}
+
+                {patientsState === 'Loaded' && patients.length === 0 && (
+                  <p className="patientMessage">No patients found.</p>
+                )}
+
+                {patientsState === 'Loaded' &&
+                  patients.length > 0 &&
+                  filteredPatients.length === 0 && (
+                    <p className="patientMessage">No patients match that search.</p>
+                  )}
+
+                {filteredPatients.map((patient) => (
+                  <article
+                    className={
+                      patient.id === selectedPatientId ? 'patientRow selected' : 'patientRow'
+                    }
+                    key={patient.id}
+                  >
+                    <button
+                      className="patientSelect"
+                      type="button"
+                      aria-pressed={patient.id === selectedPatientId}
+                      onClick={() => selectPatient(patient.id)}
+                    >
+                      <div className="patientIdentity">
+                        <span className="patientAvatar" aria-hidden="true">
+                          {patient.name
+                            .split(' ')
+                            .map((part) => part[0])
+                            .join('')
+                            .slice(0, 2)}
+                        </span>
+                        <span>
+                          <strong>{patient.name}</strong>
+                          <small>ID: {patient.id}</small>
+                          <small className="mobilePatientMeta">
+                            {formatDobWithAge(patient.dob)}
+                          </small>
+                        </span>
+                      </div>
+                      <div className="patientField" data-label="DOB">
+                        <span>{patient.dob || 'Not set'}</span>
+                        <small>
+                          {patient.lastVisit === 'New patient' ? 'New patient' : 'Patient file'}
+                        </small>
+                      </div>
+                      <span className="patientField" data-label="Contact">
+                        {patient.contact || 'No contact'}
+                      </span>
+                      <span className="patientField" data-label="Last visit">
+                        {patient.lastVisit || 'None'}
+                      </span>
+                      <span className="patientField" data-label="Notes">
+                        {patient.noteCount}
+                      </span>
+                      <span className="patientField patientStatusField" data-label="Status">
+                        <span className="statusPill">{patient.status || 'Scheduled'}</span>
+                      </span>
                     </button>
+
+                    <div className="patientRowActions" aria-label={`Manage ${patient.name}`}>
+                      {manageMode ? (
+                        <>
+                          <button type="button" onClick={() => startEditingPatient(patient)}>
+                            <Pencil size={16} />
+                            <span>Modify</span>
+                          </button>
+                          <button
+                            className="deleteRowButton"
+                            type="button"
+                            onClick={() => handleDeletePatient(patient)}
+                          >
+                            <Trash2 size={16} />
+                            <span>Delete</span>
+                          </button>
+                        </>
+                      ) : (
+                        <button type="button" onClick={() => selectPatient(patient.id)}>
+                          View
+                        </button>
+                      )}
+                    </div>
+                  </article>
+                ))}
+              </div>
+              <PaginationControls
+                disabled={patientsState === 'Loading'}
+                label="Patients"
+                pagination={patientsPagination}
+                onPrevious={previousPatientsPage}
+                onNext={nextPatientsPage}
+              />
+            </div>
+
+            <aside className="sidePanel">
+              {formMode === 'edit' ? (
+                patientFormSection
+              ) : (
+                <section className="detailCard" aria-labelledby="patient-detail-title">
+                  <div className="iconBox">
+                    <HeartPulse size={20} />
                   </div>
+                  <p className="eyebrow">Patient file</p>
+                  <h2 id="patient-detail-title">{selectedPatient?.name || 'Select a patient'}</h2>
 
-                  {visitsOpen && (
-                    <section className="visitPanel" aria-labelledby="visit-panel-title">
-                      <div className="visitPanelHeader">
+                  {selectedPatientState === 'Loading' && (
+                    <p className="detailMessage">Loading patient details...</p>
+                  )}
+
+                  {selectedPatientError && (
+                    <p className="detailMessage error">{selectedPatientError}</p>
+                  )}
+
+                  {selectedPatientState === 'Loaded' && selectedPatient && (
+                    <>
+                      <dl className="detailGrid">
                         <div>
-                          <p className="eyebrow">Visits</p>
-                          <h3 id="visit-panel-title">Patient visits</h3>
+                          <dt>Date of birth</dt>
+                          <dd>{selectedPatient.dob || 'Not set'}</dd>
                         </div>
-                        {!appointmentFormOpen && (
-                          <button type="button" onClick={() => startAppointmentForm('create')}>
-                            Schedule visit
-                          </button>
-                        )}
+                        <div>
+                          <dt>Contact</dt>
+                          <dd>{selectedPatient.contact || 'No contact'}</dd>
+                        </div>
+                      </dl>
+
+                      <div className="recordActions">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setVisitsOpen((current) => !current);
+                            setTimelineOpen(false);
+                            closeNoteForm();
+                          }}
+                        >
+                          {visitsOpen ? 'Hide visits' : 'View visits'}
+                        </button>
+                        <button type="button" onClick={toggleTimeline}>
+                          {timelineOpen ? 'Hide timeline' : 'View timeline'}
+                        </button>
                       </div>
 
-                      {!appointmentFormOpen && (
-                        <div className="visitList">
-                          <div className="visitToolbar" aria-label="Visit list mode">
-                            <button
-                              className={visitArchiveMode === 'active' ? 'selected' : ''}
-                              type="button"
-                              onClick={() => showVisitArchiveMode('active')}
-                            >
-                              Active
-                            </button>
-                            <button
-                              className={visitArchiveMode === 'archived' ? 'selected' : ''}
-                              type="button"
-                              onClick={() => showVisitArchiveMode('archived')}
-                            >
-                              Archived
-                            </button>
-                          </div>
-                          <div className="visitTableHeader" aria-hidden="true">
-                            <span>Date / time</span>
-                            <span>Reason</span>
-                            <span>Type</span>
-                            <span>Status</span>
-                            <span>Actions</span>
+                      {visitsOpen && (
+                        <section className="visitPanel" aria-labelledby="visit-panel-title">
+                          <div className="visitPanelHeader">
+                            <div>
+                              <p className="eyebrow">Visits</p>
+                              <h3 id="visit-panel-title">Patient visits</h3>
+                            </div>
+                            {!appointmentFormOpen && (
+                              <button type="button" onClick={() => startAppointmentForm('create')}>
+                                Schedule visit
+                              </button>
+                            )}
                           </div>
 
-                          {selectedPatientVisits.length === 0 && (
-                            <p className="visitEmptyState">
-                              {visitArchiveMode === 'archived'
-                                ? 'No archived visits found.'
-                                : 'No visits found.'}
-                            </p>
+                          {!appointmentFormOpen && (
+                            <div className="visitList">
+                              <div className="visitToolbar" aria-label="Visit list mode">
+                                <button
+                                  className={visitArchiveMode === 'active' ? 'selected' : ''}
+                                  type="button"
+                                  onClick={() => showVisitArchiveMode('active')}
+                                >
+                                  Active
+                                </button>
+                                <button
+                                  className={visitArchiveMode === 'archived' ? 'selected' : ''}
+                                  type="button"
+                                  onClick={() => showVisitArchiveMode('archived')}
+                                >
+                                  Archived
+                                </button>
+                              </div>
+                              <div className="visitTableHeader" aria-hidden="true">
+                                <span>Date / time</span>
+                                <span>Reason</span>
+                                <span>Type</span>
+                                <span>Status</span>
+                                <span>Actions</span>
+                              </div>
+
+                              {selectedPatientVisits.length === 0 && (
+                                <p className="visitEmptyState">
+                                  {visitArchiveMode === 'archived'
+                                    ? 'No archived visits found.'
+                                    : 'No visits found.'}
+                                </p>
+                              )}
+
+                              {selectedPatientVisits.map((visit) => {
+                                const today = getTodayDateString();
+                                const visitCategory =
+                                  visit.status === 'Completed' ||
+                                  visit.status === 'Cancelled' ||
+                                  visit.scheduledDate < today
+                                    ? 'Previous'
+                                    : 'Scheduled';
+                                const visitDateTime = visit.scheduledTime
+                                  ? `${visit.scheduledDate}T${visit.scheduledTime}`
+                                  : visit.scheduledDate;
+
+                                return (
+                                  <article className="visitRow" key={visit.id}>
+                                    <div className="visitDateCell">
+                                      <time dateTime={visitDateTime}>
+                                        {visit.scheduledDate} {visit.scheduledTime}
+                                      </time>
+                                    </div>
+                                    <strong>{visit.reason || 'No reason'}</strong>
+                                    <span>{visitCategory}</span>
+                                    <span className="statusPill">{visit.status}</span>
+                                    {visitArchiveMode === 'active' ? (
+                                      <div className="rowActions">
+                                        <button
+                                          type="button"
+                                          onClick={() => startAppointmentForm('edit', visit.id)}
+                                        >
+                                          Edit
+                                        </button>
+                                        <button
+                                          className="dangerTextButton"
+                                          disabled={archivingAppointmentId === visit.id}
+                                          type="button"
+                                          onClick={() => archiveAppointment(visit)}
+                                        >
+                                          {archivingAppointmentId === visit.id
+                                            ? 'Archiving...'
+                                            : 'Archive'}
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <span>Archived</span>
+                                    )}
+                                  </article>
+                                );
+                              })}
+                              <PaginationControls
+                                disabled={appointmentsState === 'Loading'}
+                                label="Visits"
+                                pagination={appointmentsPagination}
+                                onPrevious={previousAppointmentsPage}
+                                onNext={nextAppointmentsPage}
+                              />
+                            </div>
                           )}
 
-                          {selectedPatientVisits.map((visit) => {
-                            const today = getTodayDateString();
-                            const visitCategory =
-                              visit.status === 'Completed' ||
-                              visit.status === 'Cancelled' ||
-                              visit.scheduledDate < today
-                                ? 'Previous'
-                                : 'Scheduled';
-                            const visitDateTime = visit.scheduledTime
-                              ? `${visit.scheduledDate}T${visit.scheduledTime}`
-                              : visit.scheduledDate;
+                          {appointmentFormOpen && (
+                            <form className="visitForm" onSubmit={handleAppointmentSubmit}>
+                              <label>
+                                Date
+                                <input
+                                  name="scheduledDate"
+                                  type="date"
+                                  value={appointmentForm.scheduledDate}
+                                  onChange={handleAppointmentFormChange}
+                                />
+                              </label>
+                              <label>
+                                Time
+                                <input
+                                  name="scheduledTime"
+                                  type="time"
+                                  value={appointmentForm.scheduledTime}
+                                  onChange={handleAppointmentFormChange}
+                                />
+                              </label>
+                              <label>
+                                Status
+                                <select
+                                  name="status"
+                                  value={appointmentForm.status}
+                                  onChange={handleAppointmentFormChange}
+                                >
+                                  {visitStatuses.map((status) => (
+                                    <option key={status}>{status}</option>
+                                  ))}
+                                </select>
+                              </label>
+                              <label className="wideField">
+                                Reason
+                                <input
+                                  name="reason"
+                                  value={appointmentForm.reason}
+                                  onChange={handleAppointmentFormChange}
+                                  placeholder="Visit reason"
+                                />
+                              </label>
 
-                            return (
-                              <article className="visitRow" key={visit.id}>
-                                <div className="visitDateCell">
-                                  <time dateTime={visitDateTime}>
-                                    {visit.scheduledDate} {visit.scheduledTime}
-                                  </time>
-                                </div>
-                                <strong>{visit.reason || 'No reason'}</strong>
-                                <span>{visitCategory}</span>
-                                <span className="statusPill">{visit.status}</span>
-                                {visitArchiveMode === 'active' ? (
-                                  <div className="rowActions">
-                                    <button
-                                      type="button"
-                                      onClick={() => startAppointmentForm('edit', visit.id)}
-                                    >
-                                      Edit
-                                    </button>
-                                    <button
-                                      className="dangerTextButton"
-                                      disabled={archivingAppointmentId === visit.id}
-                                      type="button"
-                                      onClick={() => archiveAppointment(visit)}
-                                    >
-                                      {archivingAppointmentId === visit.id
-                                        ? 'Archiving...'
-                                        : 'Archive'}
-                                    </button>
+                              {appointmentFormError && (
+                                <p className="formMessage error">{appointmentFormError}</p>
+                              )}
+
+                              <div className="formActions">
+                                <button type="button" onClick={closeAppointmentForm}>
+                                  Cancel
+                                </button>
+                                <button
+                                  className="primaryButton"
+                                  disabled={appointmentFormStatus === 'Saving'}
+                                  type="submit"
+                                >
+                                  {appointmentFormStatus === 'Saving' ? 'Saving...' : 'Save visit'}
+                                </button>
+                              </div>
+                            </form>
+                          )}
+                        </section>
+                      )}
+
+                      {timelineOpen && (
+                        <section className="timelinePanel" aria-labelledby="timeline-panel-title">
+                          <div className="timelineHeader">
+                            <div>
+                              <p className="eyebrow">Timeline</p>
+                              <h3 id="timeline-panel-title">Visits and notes</h3>
+                            </div>
+                            {noteFormMode === 'closed' && (
+                              <button type="button" onClick={() => startNoteForm('create')}>
+                                Add note
+                              </button>
+                            )}
+                          </div>
+
+                          {timelineError && <p className="detailMessage error">{timelineError}</p>}
+                          {timelineState === 'Loading' && (
+                            <p className="detailMessage">Loading timeline...</p>
+                          )}
+
+                          {noteFormMode !== 'closed' && (
+                            <form className="noteForm" onSubmit={handleNoteSubmit}>
+                              <label>
+                                Visit
+                                <select
+                                  name="appointmentId"
+                                  value={noteForm.appointmentId}
+                                  onChange={handleNoteFormChange}
+                                >
+                                  <option value="">Standalone note</option>
+                                  {selectedPatientVisits.map((visit) => (
+                                    <option key={visit.id} value={visit.id}>
+                                      {visit.scheduledDate} {visit.scheduledTime} -{' '}
+                                      {visit.reason || 'Visit'}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                              <label>
+                                Note
+                                <textarea
+                                  name="text"
+                                  value={noteForm.text}
+                                  onChange={handleNoteFormChange}
+                                  placeholder="Write the clinical note"
+                                  required
+                                />
+                              </label>
+
+                              {noteFormError && (
+                                <p className="formMessage error">{noteFormError}</p>
+                              )}
+
+                              <div className="formActions">
+                                <button type="button" onClick={closeNoteForm}>
+                                  Cancel
+                                </button>
+                                <button
+                                  className="primaryButton"
+                                  disabled={noteFormStatus === 'Saving'}
+                                  type="submit"
+                                >
+                                  {noteFormStatus === 'Saving' ? 'Saving...' : 'Save note'}
+                                </button>
+                              </div>
+                            </form>
+                          )}
+
+                          {noteFormMode === 'closed' && timelineState === 'Loaded' && (
+                            <div className="timelineList">
+                              <div className="timelineTableHeader" aria-hidden="true">
+                                <span>Date</span>
+                                <span>Type</span>
+                                <span>Summary</span>
+                                <span>Status</span>
+                              </div>
+
+                              {timeline.length === 0 && (
+                                <p className="detailMessage">No timeline entries yet.</p>
+                              )}
+
+                              {timeline.map((item) => (
+                                <article className="timelineItem" key={`${item.type}-${item.id}`}>
+                                  <div>
+                                    <time dateTime={item.date}>
+                                      {item.date?.slice(0, 10)}
+                                      {item.time ? ` ${item.time}` : ''}
+                                    </time>
                                   </div>
-                                ) : (
-                                  <span>Archived</span>
-                                )}
-                              </article>
-                            );
-                          })}
-                          <PaginationControls
-                            disabled={appointmentsState === 'Loading'}
-                            label="Visits"
-                            pagination={appointmentsPagination}
-                            onPrevious={previousAppointmentsPage}
-                            onNext={nextAppointmentsPage}
-                          />
-                        </div>
-                      )}
-
-                      {appointmentFormOpen && (
-                        <form className="visitForm" onSubmit={handleAppointmentSubmit}>
-                          <label>
-                            Date
-                            <input
-                              name="scheduledDate"
-                              type="date"
-                              value={appointmentForm.scheduledDate}
-                              onChange={handleAppointmentFormChange}
-                            />
-                          </label>
-                          <label>
-                            Time
-                            <input
-                              name="scheduledTime"
-                              type="time"
-                              value={appointmentForm.scheduledTime}
-                              onChange={handleAppointmentFormChange}
-                            />
-                          </label>
-                          <label>
-                            Status
-                            <select
-                              name="status"
-                              value={appointmentForm.status}
-                              onChange={handleAppointmentFormChange}
-                            >
-                              {visitStatuses.map((status) => (
-                                <option key={status}>{status}</option>
+                                  <span className="timelineType">
+                                    {item.type === 'note' ? (
+                                      <FileText size={14} />
+                                    ) : (
+                                      <HeartPulse size={14} />
+                                    )}
+                                    {item.type === 'note' ? 'Note' : 'Visit'}
+                                  </span>
+                                  <div>
+                                    <strong>{item.title}</strong>
+                                    {item.text && <p>{item.text}</p>}
+                                  </div>
+                                  <span>
+                                    {item.status ||
+                                      (item.appointmentId ? 'Visit-linked' : 'Standalone')}
+                                  </span>
+                                </article>
                               ))}
-                            </select>
-                          </label>
-                          <label className="wideField">
-                            Reason
-                            <input
-                              name="reason"
-                              value={appointmentForm.reason}
-                              onChange={handleAppointmentFormChange}
-                              placeholder="Visit reason"
-                            />
-                          </label>
-
-                          {appointmentFormError && (
-                            <p className="formMessage error">{appointmentFormError}</p>
+                              <PaginationControls
+                                disabled={timelineState === 'Loading'}
+                                label="Timeline"
+                                pagination={timelinePagination}
+                                onPrevious={previousTimelinePage}
+                                onNext={nextTimelinePage}
+                              />
+                            </div>
                           )}
-
-                          <div className="formActions">
-                            <button type="button" onClick={closeAppointmentForm}>
-                              Cancel
-                            </button>
-                            <button
-                              className="primaryButton"
-                              disabled={appointmentFormStatus === 'Saving'}
-                              type="submit"
-                            >
-                              {appointmentFormStatus === 'Saving' ? 'Saving...' : 'Save visit'}
-                            </button>
-                          </div>
-                        </form>
+                        </section>
                       )}
-                    </section>
+                    </>
                   )}
-
-                  {timelineOpen && (
-                    <section className="timelinePanel" aria-labelledby="timeline-panel-title">
-                      <div className="timelineHeader">
-                        <div>
-                          <p className="eyebrow">Timeline</p>
-                          <h3 id="timeline-panel-title">Visits and notes</h3>
-                        </div>
-                        {noteFormMode === 'closed' && (
-                          <button type="button" onClick={() => startNoteForm('create')}>
-                            Add note
-                          </button>
-                        )}
-                      </div>
-
-                      {timelineError && <p className="detailMessage error">{timelineError}</p>}
-                      {timelineState === 'Loading' && (
-                        <p className="detailMessage">Loading timeline...</p>
-                      )}
-
-                      {noteFormMode !== 'closed' && (
-                        <form className="noteForm" onSubmit={handleNoteSubmit}>
-                          <label>
-                            Visit
-                            <select
-                              name="appointmentId"
-                              value={noteForm.appointmentId}
-                              onChange={handleNoteFormChange}
-                            >
-                              <option value="">Standalone note</option>
-                              {selectedPatientVisits.map((visit) => (
-                                <option key={visit.id} value={visit.id}>
-                                  {visit.scheduledDate} {visit.scheduledTime} -{' '}
-                                  {visit.reason || 'Visit'}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          <label>
-                            Note
-                            <textarea
-                              name="text"
-                              value={noteForm.text}
-                              onChange={handleNoteFormChange}
-                              placeholder="Write the clinical note"
-                              required
-                            />
-                          </label>
-
-                          {noteFormError && <p className="formMessage error">{noteFormError}</p>}
-
-                          <div className="formActions">
-                            <button type="button" onClick={closeNoteForm}>
-                              Cancel
-                            </button>
-                            <button
-                              className="primaryButton"
-                              disabled={noteFormStatus === 'Saving'}
-                              type="submit"
-                            >
-                              {noteFormStatus === 'Saving' ? 'Saving...' : 'Save note'}
-                            </button>
-                          </div>
-                        </form>
-                      )}
-
-                      {noteFormMode === 'closed' && timelineState === 'Loaded' && (
-                        <div className="timelineList">
-                          <div className="timelineTableHeader" aria-hidden="true">
-                            <span>Date</span>
-                            <span>Type</span>
-                            <span>Summary</span>
-                            <span>Status</span>
-                          </div>
-
-                          {timeline.length === 0 && (
-                            <p className="detailMessage">No timeline entries yet.</p>
-                          )}
-
-                          {timeline.map((item) => (
-                            <article className="timelineItem" key={`${item.type}-${item.id}`}>
-                              <div>
-                                <time dateTime={item.date}>
-                                  {item.date?.slice(0, 10)}
-                                  {item.time ? ` ${item.time}` : ''}
-                                </time>
-                              </div>
-                              <span className="timelineType">
-                                {item.type === 'note' ? (
-                                  <FileText size={14} />
-                                ) : (
-                                  <HeartPulse size={14} />
-                                )}
-                                {item.type === 'note' ? 'Note' : 'Visit'}
-                              </span>
-                              <div>
-                                <strong>{item.title}</strong>
-                                {item.text && <p>{item.text}</p>}
-                              </div>
-                              <span>
-                                {item.status ||
-                                  (item.appointmentId ? 'Visit-linked' : 'Standalone')}
-                              </span>
-                            </article>
-                          ))}
-                          <PaginationControls
-                            disabled={timelineState === 'Loading'}
-                            label="Timeline"
-                            pagination={timelinePagination}
-                            onPrevious={previousTimelinePage}
-                            onNext={nextTimelinePage}
-                          />
-                        </div>
-                      )}
-                    </section>
-                  )}
-                </>
+                </section>
               )}
-            </section>
-          )}
 
-          {formMode === 'create' && patientFormSection}
-        </aside>
+              {formMode === 'create' && patientFormSection}
+            </aside>
+          </>
+        )}
       </section>
     </main>
   );

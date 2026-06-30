@@ -52,9 +52,9 @@ reviewed summary is saved with the original doctor note.
 
 ### Feature detail notes
 
-- **Dashboard (Partial):** UI shell and live `/api/health` status exist. The next
-  direction is an appointment-first dashboard showing today's appointments,
-  patient information, visit status, and an `Open appointment` action.
+- **Dashboard (Partial):** UI shell, live `/api/health` status, today's
+  appointment list, patient information, visit status, and an `Open appointment`
+  action exist. The list depends on appointments dated today.
 - **Patient management (Completed):** list/get/create/edit/archive exists for each
   authenticated doctor, backed by MongoDB Atlas.
 - **Appointments (Completed):** appointment model, patient visit history,
@@ -74,10 +74,10 @@ reviewed summary is saved with the original doctor note.
   `Doctor review` -> `Completed` -> `Cancelled`.
 - **Notes:** a note may link to a visit (`appointmentId`) or be standalone
   (`appointmentId = null`).
-- **Appointment workspace:** planned next. Opening an appointment should show
-  patient context at the top, visit reason, a previous visits action, a clinical
-  note textarea, and an AI summary workflow that appears only after a doctor note
-  exists.
+- **Appointment workspace:** opening an appointment shows patient context at the
+  top, visit reason, a previous visits action, and a clinical note textarea. Real
+  AI summary generation/review is the next Stage 8 step and should appear only
+  after a doctor note exists.
 - **AI review:** planned for Stage 8. An AI summary will be `draft` until the
   doctor accepts/edits it into a reviewed summary or rejects it. The original
   doctor note remains saved separately from the AI-generated draft.
