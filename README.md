@@ -4,7 +4,7 @@ Clinic AI Copilot is a doctor-facing clinic workspace built as a staged training
 
 ## Current Stage
 
-Current stage: Stage 5 - auth and database-backed clinical workflow.
+Current stage: Stage 7 complete - patient, visit, note, and timeline workflow.
 
 Implemented:
 
@@ -13,7 +13,7 @@ Implemented:
 - Express API with JWT-protected clinical endpoints
 - MongoDB Atlas storage through Mongoose
 - Patient management with soft archive delete behavior
-- Visits, notes, and patient timeline views
+- Visits, notes, and patient timeline views with archive behavior
 - Pagination for patients, visits, notes, and timeline endpoints
 
 Not yet implemented:

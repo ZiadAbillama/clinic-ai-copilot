@@ -377,6 +377,28 @@ async function syncPatientVisitFields(doctorId, appointment) {
   );
 }
 
+async function refreshPatientVisitFields(doctorId, patientId) {
+  const latestAppointment = await Appointment.findOne({
+    doctorId,
+    patientId,
+    archivedAt: null,
+  })
+    .sort({ scheduledDate: -1, scheduledTime: -1, id: 1 })
+    .select(appointmentPublicFields)
+    .lean();
+
+  await Patient.updateOne(
+    { doctorId, id: patientId, archivedAt: null },
+    {
+      $set: {
+        appointment: latestAppointment?.scheduledTime || '',
+        reason: latestAppointment?.reason || '',
+        status: latestAppointment?.status || 'Scheduled',
+      },
+    },
+  );
+}
+
 app.use(
   cors({
     origin(origin, callback) {
@@ -524,9 +546,10 @@ app.get('/api/patients/:id', async (req, res) => {
 app.get('/api/appointments', async (req, res) => {
   try {
     const pagination = getPagination(req.query);
+    const archiveMode = req.query.archived === 'true' ? 'archived' : 'active';
     const query = {
       doctorId: req.doctor.id,
-      archivedAt: null,
+      archivedAt: archiveMode === 'archived' ? { $ne: null } : null,
     };
 
     if (req.query.date) {
@@ -587,6 +610,7 @@ app.post('/api/appointments', async (req, res) => {
       .select(appointmentPublicFields)
       .lean();
     await syncPatientVisitFields(req.doctor.id, savedAppointment);
+    await writeAuditLog(req.doctor.id, 'appointment.created', 'Appointment', savedAppointment.id);
     res.status(201).json(await buildAppointmentResponse(savedAppointment, req.doctor.id));
   } catch (error) {
     if (isInputError(error)) {
@@ -616,6 +640,7 @@ app.patch('/api/appointments/:id', async (req, res) => {
     }
 
     await syncPatientVisitFields(req.doctor.id, appointment);
+    await writeAuditLog(req.doctor.id, 'appointment.updated', 'Appointment', appointment.id);
     res.json(await buildAppointmentResponse(appointment, req.doctor.id));
   } catch (error) {
     if (isInputError(error)) {
@@ -625,6 +650,34 @@ app.patch('/api/appointments/:id', async (req, res) => {
 
     logApiError('appointments.update_failed', error);
     res.status(500).json({ error: 'Failed to update appointment' });
+  }
+});
+
+app.delete('/api/appointments/:id', async (req, res) => {
+  try {
+    const appointment = await Appointment.findOneAndUpdate(
+      { doctorId: req.doctor.id, id: req.params.id, archivedAt: null },
+      {
+        $set: {
+          archivedAt: new Date(),
+        },
+      },
+      { new: true },
+    )
+      .select(appointmentPublicFields)
+      .lean();
+
+    if (!appointment) {
+      res.status(404).json({ error: 'Appointment not found' });
+      return;
+    }
+
+    await refreshPatientVisitFields(req.doctor.id, appointment.patientId);
+    await writeAuditLog(req.doctor.id, 'appointment.archived', 'Appointment', appointment.id);
+    res.json({ deleted: true, archived: true, appointment });
+  } catch (error) {
+    logApiError('appointments.delete_failed', error);
+    res.status(500).json({ error: 'Failed to delete appointment' });
   }
 });
 
@@ -894,6 +947,7 @@ app.post('/api/patients', async (req, res) => {
 
     const savedPatient = await Patient.findById(patient._id).select(patientPublicFields).lean();
     await upsertTodayAppointmentForPatient(req.doctor.id, savedPatient);
+    await writeAuditLog(req.doctor.id, 'patient.created', 'Patient', savedPatient.id);
     res.status(201).json(savedPatient);
   } catch (error) {
     if (isInputError(error)) {
@@ -923,6 +977,7 @@ app.patch('/api/patients/:id', async (req, res) => {
     }
 
     await upsertTodayAppointmentForPatient(req.doctor.id, patient);
+    await writeAuditLog(req.doctor.id, 'patient.updated', 'Patient', patient.id);
     res.json(patient);
   } catch (error) {
     if (isInputError(error)) {

@@ -1,144 +1,158 @@
-# Clinic AI Copilot — Project Plan
+# Clinic AI Copilot - Project Plan
 
 Single source of truth for scope, decisions, and status.
-Legend: ✅ Completed · 🟡 Partial · ⬜ Planned
+Legend: Completed / Partial / Planned
 
 ## 1. Product
 
 Clinic AI Copilot is a simplified AI-assisted clinic workspace for doctors. Each
-doctor manages their own patients, visits, and medical notes, and uses a local AI
-model to draft note summaries that the doctor must review before they count.
+doctor manages their own patients, visits, and medical notes, and will later use a
+local AI model to draft note summaries that the doctor must review before they
+count.
 
-Core workflow: open/schedule a visit → add notes → AI drafts a summary → doctor
-approves or rejects → everything appears on the patient timeline.
+Core workflow: doctor opens today's appointment -> reviews patient and visit
+context -> writes the clinical note normally -> asks AI to draft a summary only
+after the note exists -> doctor accepts, edits, regenerates, or rejects -> final
+reviewed summary is saved with the original doctor note.
 
 ## 2. Final Stack Decisions
 
-| Area     | Decision                                                             | Status |
-| -------- | -------------------------------------------------------------------- | ------ |
-| Language | JavaScript only (no TypeScript)                                      | ✅     |
-| Frontend | React with Vite                                                      | ✅     |
-| Backend  | Node.js with Express (single API service)                            | ✅     |
-| Database | MongoDB only, via Mongoose (no PostgreSQL)                           | ✅     |
-| AI       | Local Ollama server, model `llama3.1:8b` at `http://localhost:11434` | ⬜     |
-| Auth     | Multiple doctors, isolated data, real JWT                            | ✅     |
-| Search   | MongoDB text search (semantic later)                                 | ⬜     |
-| Infra    | Docker Compose (later)                                               | ⬜     |
-| Tooling  | Yarn workspaces, ESLint, Prettier                                    | ✅     |
+| Area     | Decision                                                             | Status    |
+| -------- | -------------------------------------------------------------------- | --------- |
+| Language | JavaScript only (no TypeScript)                                      | Completed |
+| Frontend | React with Vite                                                      | Completed |
+| Backend  | Node.js with Express (single API service)                            | Completed |
+| Database | MongoDB only, via Mongoose (no PostgreSQL)                           | Completed |
+| AI       | Local Ollama server, model `llama3.1:8b` at `http://localhost:11434` | Planned   |
+| Auth     | Multiple doctors, isolated data, real JWT                            | Completed |
+| Search   | MongoDB text search (semantic later)                                 | Planned   |
+| Infra    | Docker Compose (later)                                               | Planned   |
+| Tooling  | Yarn workspaces, ESLint, Prettier                                    | Completed |
 
 ## 3. Roles & Data Isolation
 
 - One role: **doctor**. Many doctor accounts.
-- Every record is owned by a `doctorId`. Every query is scoped to the authenticated
-  doctor, so doctors never see each other's data.
+- Every record is owned by a `doctorId`. Every query is scoped to the
+  authenticated doctor, so doctors never see each other's data.
 
 ## 4. Features
 
-| #   | Feature               | Summary                                                        | Status |
-| --- | --------------------- | -------------------------------------------------------------- | ------ |
-| 1   | Doctor dashboard      | Home: this doctor's patients, today's visits, AI/system status | 🟡     |
-| 2   | Patient management    | List / open / create / edit patients                           | 🟡     |
-| 3   | Appointments (visits) | Today's visit list, backed by MongoDB                          | 🟡     |
-| 4   | Medical notes         | Attached to a visit **or standalone** on a patient             | 🟡     |
-| 5   | Patient timeline      | Merged visits + notes, newest-first                            | 🟡     |
-| 6   | AI summarization      | Local Ollama drafts a note summary                             | ⬜     |
-| 7   | AI review             | Draft → Approved / Rejected; only Approved counts              | ⬜     |
-| 8   | Note search           | MongoDB text search over notes                                 | ⬜     |
-| 9   | Audit log             | Record key doctor actions                                      | 🟡     |
-| 10  | Auth                  | Multiple doctors, isolated data, JWT                           | ✅     |
+| #   | Feature               | Summary                                                      | Status    |
+| --- | --------------------- | ------------------------------------------------------------ | --------- |
+| 1   | Doctor dashboard      | Today's appointments with patient/status/open appointment    | Partial   |
+| 2   | Patient management    | List / open / create / edit / archive patients               | Completed |
+| 3   | Appointments (visits) | Patient visit history, scheduling, editing, archive behavior | Completed |
+| 4   | Medical notes         | Attached to a visit or standalone on a patient               | Completed |
+| 5   | Patient timeline      | Merged visits + notes, newest-first                          | Completed |
+| 6   | AI summarization      | Local Ollama drafts a note summary after doctor note exists  | Planned   |
+| 7   | AI review             | Draft -> Approved / Rejected; only Approved counts           | Planned   |
+| 8   | Note search           | MongoDB text search over notes                               | Planned   |
+| 9   | Audit log             | Record key doctor actions                                    | Partial   |
+| 10  | Auth                  | Multiple doctors, isolated data, JWT                         | Completed |
 
 ### Feature detail notes
 
-- **Dashboard (🟡):** UI shell + live `/api/health` status done; today's visit list
-  now loads through `/api/appointments`.
-- **Patient management (🟡):** list/get/create/edit/delete exists for the demo
-  doctor, backed by MongoDB Atlas.
-- **Appointments (🟡):** Appointment model, today's visit list, and basic
-  schedule/edit controls exist. Visit history is not built yet.
-- **Database (✅):** Mongoose connection and planned model layer exist for
-  Doctor, Patient, Appointment, Note, AiSummary, and AuditLog.
-- **Medical notes (🟡):** Notes can be created, edited, deleted, and linked to a
-  visit or saved as standalone patient notes. AI summaries are not attached yet.
-- **Patient timeline (🟡):** Patient timeline API and UI merge visits + notes,
+- **Dashboard (Partial):** UI shell and live `/api/health` status exist. The next
+  direction is an appointment-first dashboard showing today's appointments,
+  patient information, visit status, and an `Open appointment` action.
+- **Patient management (Completed):** list/get/create/edit/archive exists for each
+  authenticated doctor, backed by MongoDB Atlas.
+- **Appointments (Completed):** appointment model, patient visit history,
+  schedule/edit/archive controls, and patient-linked visit display exist.
+- **Database (Completed):** Mongoose connection and model layer exist for Doctor,
+  Patient, Appointment, Note, AiSummary, and AuditLog.
+- **Medical notes (Completed):** notes can be created, edited, archived, and linked
+  to a visit or saved as standalone patient notes.
+- **Patient timeline (Completed):** timeline API and UI merge visits + notes,
   newest-first. AI summaries are not shown yet.
-- **Audit log (🟡):** AuditLog model exists and note create/update/delete plus
-  patient delete are recorded. Full action coverage and an audit viewer are not
-  built yet.
-- **Auth (✅):** Doctors can register/login with JWT. Patient, appointment, note,
-  timeline, and audit routes are scoped to the authenticated doctor. The seed
-  script creates a demo doctor for existing starter data.
-- **Visit statuses:** `Scheduled` → `In progress` → `Completed` → `Cancelled`.
-  "Start now" creates the visit directly as `In progress`; "Schedule" creates it as
-  `Scheduled`.
+- **Audit log (Partial):** AuditLog model exists and patient, appointment, and note
+  create/update/archive actions are recorded. A full audit viewer is not built yet.
+- **Auth (Completed):** doctors can register/login with JWT. Patient,
+  appointment, note, timeline, and audit routes are scoped to the authenticated
+  doctor. The seed script creates a demo doctor for existing starter data.
+- **Visit statuses:** `Scheduled` -> `Checked in` -> `Needs vitals` ->
+  `Doctor review` -> `Completed` -> `Cancelled`.
 - **Notes:** a note may link to a visit (`appointmentId`) or be standalone
   (`appointmentId = null`).
-- **AI review:** an AI summary is `draft` until the doctor sets it `approved` or
-  `rejected`. Only `approved` summaries are treated as part of the record.
+- **Appointment workspace:** planned next. Opening an appointment should show
+  patient context at the top, visit reason, a previous visits action, a clinical
+  note textarea, and an AI summary workflow that appears only after a doctor note
+  exists.
+- **AI review:** planned for Stage 8. An AI summary will be `draft` until the
+  doctor accepts/edits it into a reviewed summary or rejects it. The original
+  doctor note remains saved separately from the AI-generated draft.
 
 ## 5. Data Model (MongoDB / Mongoose)
 
 Every collection is owned by `doctorId`.
 
-- **Doctor** — name, email, passwordHash
-- **Patient** — doctorId, name, dob, contact
-- **Appointment (Visit)** — doctorId, patientId, scheduledAt, reason, status
-- **Note** — doctorId, patientId, appointmentId (nullable = standalone), text, createdAt
-- **AiSummary** — doctorId, noteId, text, status (`draft`/`approved`/`rejected`), reviewedAt
-- **AuditLog** — doctorId, action, targetType, targetId, timestamp
+- **Doctor** - name, email, passwordHash
+- **Patient** - doctorId, name, dob, contact, visit summary fields, noteCount,
+  archivedAt
+- **Appointment (Visit)** - doctorId, patientId, scheduledDate, scheduledTime,
+  reason, status, archivedAt
+- **Note** - doctorId, patientId, appointmentId (nullable = standalone), text,
+  archivedAt
+- **AiSummary** - doctorId, noteId, text, status (`draft`/`approved`/`rejected`),
+  reviewedAt
+- **AuditLog** - doctorId, action, targetType, targetId, timestamp
 
-**Timeline:** for one patient, merge that patient's Appointments + Notes (scoped to
-the doctor) and sort newest-first; show each note's AI summary inline.
+**Timeline:** for one patient, merge that patient's Appointments + Notes (scoped
+to the doctor) and sort newest-first.
 
 ## 6. API Surface
 
-Current (✅):
+Current (JWT-protected unless noted):
 
-- `GET /api/health` — service status
-- `POST /api/auth/register` — create a doctor account and return a JWT
-- `POST /api/auth/login` — sign in a doctor and return a JWT
-- `GET /api/auth/me` — return the authenticated doctor
-- `GET /api/patients` — list this doctor's patients from MongoDB Atlas
-- `GET /api/patients/:id` — single patient scoped to this doctor
-- `POST /api/patients` — create a patient for this doctor
-- `PATCH /api/patients/:id` — update this doctor's patient
-- `DELETE /api/patients/:id` — remove this doctor's patient
-- `GET /api/appointments` — today's visits with patient data from MongoDB Atlas
-- `POST /api/appointments` — create a visit for a patient
-- `PATCH /api/appointments/:id` — update a visit
-- `GET /api/notes` — list notes, optionally filtered by patient or visit
-- `POST /api/notes` — create a standalone or visit-linked note
-- `PATCH /api/notes/:id` — update a note
-- `DELETE /api/notes/:id` — delete a note
-- `GET /api/patients/:id/timeline` — merged visits + notes for one patient
+- `GET /api/health` - service status
+- `POST /api/auth/register` - create a doctor account and return a JWT
+- `POST /api/auth/login` - sign in a doctor and return a JWT
+- `GET /api/auth/me` - return the authenticated doctor
+- `GET /api/patients` - list this doctor's active patients from MongoDB Atlas
+- `GET /api/patients/:id` - single active patient scoped to this doctor
+- `POST /api/patients` - create a patient for this doctor
+- `PATCH /api/patients/:id` - update this doctor's patient
+- `DELETE /api/patients/:id` - archive this doctor's patient and child records
+- `GET /api/appointments` - visits with patient data from MongoDB Atlas
+- `POST /api/appointments` - create a visit for a patient
+- `PATCH /api/appointments/:id` - update a visit
+- `DELETE /api/appointments/:id` - archive a visit
+- `GET /api/notes` - list notes, optionally filtered by patient or visit
+- `POST /api/notes` - create a standalone or visit-linked note
+- `PATCH /api/notes/:id` - update a note
+- `DELETE /api/notes/:id` - archive a note
+- `GET /api/patients/:id/timeline` - merged visits + notes for one patient
 
-Planned (⬜, all JWT-protected and doctor-scoped):
+Planned:
 
-- `POST /api/notes/:id/summarize` (Ollama) and `PATCH /api/summaries/:id` (approve/reject)
-- `GET /api/notes/search?q=`
-- Audit log written on key actions
+- `POST /api/notes/:id/summarize` - generate an Ollama draft summary
+- `PATCH /api/summaries/:id` - approve/reject an AI summary
+- `GET /api/notes/search?q=` - text search over notes
+- Audit log viewer
 
 ## 7. Build Roadmap
 
-| Stage | Focus                                       | Status |
-| ----- | ------------------------------------------- | ------ |
-| 0     | Domain summary                              | ✅     |
-| 1     | Environment check                           | ✅     |
-| 2     | Repository structure (monorepo, JS-only)    | ✅     |
-| 3     | Frontend design slice + health/patients API | ✅     |
-| 4     | MongoDB + Mongoose models                   | ✅     |
-| 5     | Auth (JWT, multi-doctor, data isolation)    | ✅     |
-| 6     | Patients + visits + notes CRUD              | 🟡     |
-| 7     | Patient timeline                            | 🟡     |
-| 8     | AI summarization (Ollama) + review workflow | ⬜     |
-| 9     | Note search + audit log                     | ⬜     |
-| 10    | Dockerize + deployment                      | ⬜     |
+| Stage | Focus                                       | Status    |
+| ----- | ------------------------------------------- | --------- |
+| 0     | Domain summary                              | Completed |
+| 1     | Environment check                           | Completed |
+| 2     | Repository structure (monorepo, JS-only)    | Completed |
+| 3     | Frontend design slice + health/patients API | Completed |
+| 4     | MongoDB + Mongoose models                   | Completed |
+| 5     | Auth (JWT, multi-doctor, data isolation)    | Completed |
+| 6     | Patients + visits + notes CRUD              | Completed |
+| 7     | Patient timeline                            | Completed |
+| 8     | AI summarization (Ollama) + review workflow | Planned   |
+| 9     | Note search + audit log                     | Planned   |
+| 10    | Dockerize + deployment                      | Planned   |
 
 ## 8. Known Limitations (current)
 
 - Patient data uses MongoDB Atlas, seeded from starter data.
-- Patient create/edit/delete exists, but richer validation and duplicate handling are still basic.
+- Patient create/edit/archive exists, but richer duplicate handling is still basic.
 - The demo doctor account is created by `yarn api:seed`; new doctor accounts start
   with empty patient data by design.
-- Appointment persistence and basic scheduling/editing exist.
-- Notes CRUD and the patient timeline exist, but note validation and UX are still basic.
+- Appointment persistence, patient visit history, scheduling/editing, and archive
+  behavior exist.
+- Notes CRUD and the patient timeline exist; AI summaries are not attached yet.
 - No AI summary generation/review, note search, or full audit viewer yet.

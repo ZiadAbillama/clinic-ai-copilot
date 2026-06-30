@@ -35,6 +35,23 @@ function getTodayDateString() {
   return localDate.toISOString().slice(0, 10);
 }
 
+function formatDobWithAge(dob) {
+  if (!dob) return 'DOB: Not set';
+
+  const birthDate = new Date(`${dob}T00:00:00`);
+  if (Number.isNaN(birthDate.getTime())) return `DOB: ${dob}`;
+
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const hasBirthdayPassed =
+    today.getMonth() > birthDate.getMonth() ||
+    (today.getMonth() === birthDate.getMonth() && today.getDate() >= birthDate.getDate());
+
+  if (!hasBirthdayPassed) age -= 1;
+
+  return `DOB: ${dob} (${age}y)`;
+}
+
 const emptyPatientForm = {
   name: '',
   dob: '',
@@ -141,6 +158,7 @@ export default function App() {
   const [appointmentsPagination, setAppointmentsPagination] = useState(
     createPagination(detailPageLimit),
   );
+  const [visitArchiveMode, setVisitArchiveMode] = useState('active');
   const [selectedPatientId, setSelectedPatientId] = useState('');
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [selectedPatientState, setSelectedPatientState] = useState('Idle');
@@ -159,17 +177,13 @@ export default function App() {
   const [appointmentFormError, setAppointmentFormError] = useState('');
   const [visitsOpen, setVisitsOpen] = useState(false);
   const [editingAppointmentId, setEditingAppointmentId] = useState('');
+  const [archivingAppointmentId, setArchivingAppointmentId] = useState('');
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [timeline, setTimeline] = useState([]);
   const [timelineState, setTimelineState] = useState('Idle');
   const [timelineError, setTimelineError] = useState('');
   const [timelinePage, setTimelinePage] = useState(1);
   const [timelinePagination, setTimelinePagination] = useState(createPagination(detailPageLimit));
-  const [notes, setNotes] = useState([]);
-  const [notesState, setNotesState] = useState('Idle');
-  const [notesError, setNotesError] = useState('');
-  const [notesPage, setNotesPage] = useState(1);
-  const [notesPagination, setNotesPagination] = useState(createPagination(detailPageLimit));
   const [noteFormMode, setNoteFormMode] = useState('closed');
   const [noteForm, setNoteForm] = useState(emptyNoteForm);
   const [noteFormStatus, setNoteFormStatus] = useState('Idle');
@@ -184,14 +198,12 @@ export default function App() {
     setDoctor(null);
     setPatients([]);
     setAppointments([]);
-    setNotes([]);
     setTimeline([]);
     setSelectedPatientId('');
     setSelectedPatient(null);
     setAuthStatus('Idle');
     setPatientsPage(1);
     setAppointmentsPage(1);
-    setNotesPage(1);
     setTimelinePage(1);
   }, []);
 
@@ -308,6 +320,7 @@ export default function App() {
           patientId,
           page,
           limit: detailPageLimit,
+          archived: visitArchiveMode === 'archived' ? 'true' : '',
         })}`,
       )
         .then(async (res) => {
@@ -333,7 +346,7 @@ export default function App() {
           return [];
         });
     },
-    [apiFetch, appointmentsPage, authToken, selectedPatientId],
+    [apiFetch, appointmentsPage, authToken, selectedPatientId, visitArchiveMode],
   );
 
   function startNewPatient() {
@@ -393,7 +406,7 @@ export default function App() {
   function selectPatient(patientId) {
     setSelectedPatientId(patientId);
     setAppointmentsPage(1);
-    setNotesPage(1);
+    setVisitArchiveMode('active');
     setTimelinePage(1);
     closeAppointmentForm();
     closeNoteForm();
@@ -417,20 +430,18 @@ export default function App() {
     setAppointmentsPage((currentPage) => currentPage + 1);
   }
 
+  function showVisitArchiveMode(mode) {
+    setVisitArchiveMode(mode);
+    setAppointmentsPage(1);
+    closeAppointmentForm();
+  }
+
   function previousTimelinePage() {
     setTimelinePage((currentPage) => Math.max(currentPage - 1, 1));
   }
 
   function nextTimelinePage() {
     setTimelinePage((currentPage) => currentPage + 1);
-  }
-
-  function previousNotesPage() {
-    setNotesPage((currentPage) => Math.max(currentPage - 1, 1));
-  }
-
-  function nextNotesPage() {
-    setNotesPage((currentPage) => currentPage + 1);
   }
 
   function handleAppointmentFormChange(event) {
@@ -486,46 +497,6 @@ export default function App() {
         });
     },
     [apiFetch, selectedPatientId, timelinePage],
-  );
-
-  const loadNotes = useCallback(
-    (patientId = selectedPatientId, page = notesPage) => {
-      if (!patientId) return Promise.resolve([]);
-
-      setNotesState('Loading');
-      setNotesError('');
-
-      return apiFetch(
-        `/api/notes?${buildQuery({
-          patientId,
-          page,
-          limit: detailPageLimit,
-        })}`,
-      )
-        .then(async (res) => {
-          if (!res.ok) throw res;
-
-          return {
-            data: await res.json(),
-            pagination: paginationFromResponse(res, page, detailPageLimit),
-          };
-        })
-        .then(({ data, pagination }) => {
-          setNotes(data);
-          setNotesPagination(pagination);
-          setNotesState('Loaded');
-          setNotesError('');
-          return data;
-        })
-        .catch(() => {
-          setNotes([]);
-          setNotesPagination(createPagination(detailPageLimit));
-          setNotesState('Offline');
-          setNotesError('Notes are unavailable. Check the API and try again.');
-          return [];
-        });
-    },
-    [apiFetch, notesPage, selectedPatientId],
   );
 
   function toggleTimeline() {
@@ -620,10 +591,8 @@ export default function App() {
           setSelectedPatient(null);
           setSelectedPatientId('');
           setAppointments([]);
-          setNotes([]);
           setTimeline([]);
           setAppointmentsPage(1);
-          setNotesPage(1);
           setTimelinePage(1);
           closePatientForm();
           closeAppointmentForm();
@@ -691,6 +660,40 @@ export default function App() {
       });
   }
 
+  function archiveAppointment(appointment) {
+    if (!appointment || archivingAppointmentId) return;
+
+    setArchivingAppointmentId(appointment.id);
+    setAppointmentsError('');
+
+    apiFetch(`/api/appointments/${encodeURIComponent(appointment.id)}`, {
+      method: 'DELETE',
+    })
+      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
+      .then(() => {
+        setNotice({
+          tone: 'success',
+          title: 'Visit archived',
+          text: `${selectedPatient?.name || 'Patient'} visit history is up to date.`,
+        });
+        if (visitArchiveMode !== 'active') {
+          setVisitArchiveMode('active');
+          setAppointmentsPage(1);
+        }
+        return Promise.all([
+          loadAppointments(selectedPatientId, visitArchiveMode === 'active' ? appointmentsPage : 1),
+          timelineOpen ? loadTimeline(selectedPatientId, timelinePage) : Promise.resolve(),
+          refreshWorkspace(selectedPatientId),
+        ]);
+      })
+      .catch(() => {
+        setAppointmentsError('Could not archive visit. Check the API and try again.');
+      })
+      .finally(() => {
+        setArchivingAppointmentId('');
+      });
+  }
+
   function handleNoteSubmit(event) {
     event.preventDefault();
     if (!selectedPatientId) return;
@@ -710,10 +713,9 @@ export default function App() {
     })
       .then((res) => (res.ok ? res.json() : Promise.reject(res)))
       .then(() => {
-        const nextPage = isEditing ? notesPage : 1;
         setNoteFormStatus('Saved');
         closeNoteForm();
-        if (!isEditing) setNotesPage(1);
+        if (!isEditing) setTimelinePage(1);
         setTimelineOpen(true);
         setNotice({
           tone: 'success',
@@ -721,38 +723,13 @@ export default function App() {
           text: `${selectedPatient?.name || 'Patient'} timeline is up to date.`,
         });
         return Promise.all([
-          loadTimeline(selectedPatientId, timelinePage),
-          loadNotes(selectedPatientId, nextPage),
+          loadTimeline(selectedPatientId, isEditing ? timelinePage : 1),
           refreshWorkspace(selectedPatientId),
         ]);
       })
       .catch(() => {
         setNoteFormStatus('Error');
         setNoteFormError('Could not save note. Check the API and try again.');
-      });
-  }
-
-  function deleteNote(note) {
-    if (!note) return;
-
-    apiFetch(`/api/notes/${encodeURIComponent(note.id)}`, {
-      method: 'DELETE',
-    })
-      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
-      .then(() => {
-        setNotice({
-          tone: 'success',
-          title: 'Note removed',
-          text: `${selectedPatient?.name || 'Patient'} timeline is up to date.`,
-        });
-        return Promise.all([
-          loadTimeline(selectedPatientId, timelinePage),
-          loadNotes(selectedPatientId, notesPage),
-          refreshWorkspace(selectedPatientId),
-        ]);
-      })
-      .catch(() => {
-        setTimelineError('Could not delete note. Check the API and try again.');
       });
   }
 
@@ -883,12 +860,6 @@ export default function App() {
 
     loadTimeline();
   }, [loadTimeline, timelineOpen]);
-
-  useEffect(() => {
-    if (!timelineOpen) return;
-
-    loadNotes();
-  }, [loadNotes, timelineOpen]);
 
   useEffect(() => {
     if (!authToken) return undefined;
@@ -1331,18 +1302,27 @@ export default function App() {
                     <span>
                       <strong>{patient.name}</strong>
                       <small>ID: {patient.id}</small>
+                      <small className="mobilePatientMeta">{formatDobWithAge(patient.dob)}</small>
                     </span>
                   </div>
-                  <div>
+                  <div className="patientField" data-label="DOB">
                     <span>{patient.dob || 'Not set'}</span>
                     <small>
                       {patient.lastVisit === 'New patient' ? 'New patient' : 'Patient file'}
                     </small>
                   </div>
-                  <span>{patient.contact || 'No contact'}</span>
-                  <span>{patient.lastVisit || 'None'}</span>
-                  <span>{patient.noteCount}</span>
-                  <span className="statusPill">{patient.status || 'Scheduled'}</span>
+                  <span className="patientField" data-label="Contact">
+                    {patient.contact || 'No contact'}
+                  </span>
+                  <span className="patientField" data-label="Last visit">
+                    {patient.lastVisit || 'None'}
+                  </span>
+                  <span className="patientField" data-label="Notes">
+                    {patient.noteCount}
+                  </span>
+                  <span className="patientField patientStatusField" data-label="Status">
+                    <span className="statusPill">{patient.status || 'Scheduled'}</span>
+                  </span>
                 </button>
 
                 <div className="patientRowActions" aria-label={`Manage ${patient.name}`}>
@@ -1443,6 +1423,22 @@ export default function App() {
 
                       {!appointmentFormOpen && (
                         <div className="visitList">
+                          <div className="visitToolbar" aria-label="Visit list mode">
+                            <button
+                              className={visitArchiveMode === 'active' ? 'selected' : ''}
+                              type="button"
+                              onClick={() => showVisitArchiveMode('active')}
+                            >
+                              Active
+                            </button>
+                            <button
+                              className={visitArchiveMode === 'archived' ? 'selected' : ''}
+                              type="button"
+                              onClick={() => showVisitArchiveMode('archived')}
+                            >
+                              Archived
+                            </button>
+                          </div>
                           <div className="visitTableHeader" aria-hidden="true">
                             <span>Date / time</span>
                             <span>Reason</span>
@@ -1452,7 +1448,11 @@ export default function App() {
                           </div>
 
                           {selectedPatientVisits.length === 0 && (
-                            <p className="detailMessage">No visits found.</p>
+                            <p className="visitEmptyState">
+                              {visitArchiveMode === 'archived'
+                                ? 'No archived visits found.'
+                                : 'No visits found.'}
+                            </p>
                           )}
 
                           {selectedPatientVisits.map((visit) => {
@@ -1477,12 +1477,28 @@ export default function App() {
                                 <strong>{visit.reason || 'No reason'}</strong>
                                 <span>{visitCategory}</span>
                                 <span className="statusPill">{visit.status}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => startAppointmentForm('edit', visit.id)}
-                                >
-                                  Edit
-                                </button>
+                                {visitArchiveMode === 'active' ? (
+                                  <div className="rowActions">
+                                    <button
+                                      type="button"
+                                      onClick={() => startAppointmentForm('edit', visit.id)}
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      className="dangerTextButton"
+                                      disabled={archivingAppointmentId === visit.id}
+                                      type="button"
+                                      onClick={() => archiveAppointment(visit)}
+                                    >
+                                      {archivingAppointmentId === visit.id
+                                        ? 'Archiving...'
+                                        : 'Archive'}
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <span>Archived</span>
+                                )}
                               </article>
                             );
                           })}
@@ -1631,7 +1647,6 @@ export default function App() {
                             <span>Type</span>
                             <span>Summary</span>
                             <span>Status</span>
-                            <span>Actions</span>
                           </div>
 
                           {timeline.length === 0 && (
@@ -1662,16 +1677,6 @@ export default function App() {
                                 {item.status ||
                                   (item.appointmentId ? 'Visit-linked' : 'Standalone')}
                               </span>
-                              {item.type === 'note' && (
-                                <div className="timelineActions">
-                                  <button type="button" onClick={() => startNoteForm('edit', item)}>
-                                    Edit
-                                  </button>
-                                  <button type="button" onClick={() => deleteNote(item)}>
-                                    Delete
-                                  </button>
-                                </div>
-                              )}
                             </article>
                           ))}
                           <PaginationControls
@@ -1682,66 +1687,6 @@ export default function App() {
                             onNext={nextTimelinePage}
                           />
                         </div>
-                      )}
-
-                      {noteFormMode === 'closed' && (
-                        <section className="notesPanel" aria-labelledby="notes-panel-title">
-                          <div className="timelineHeader">
-                            <div>
-                              <p className="eyebrow">Notes</p>
-                              <h3 id="notes-panel-title">Clinical notes</h3>
-                            </div>
-                          </div>
-
-                          {notesError && <p className="detailMessage error">{notesError}</p>}
-                          {notesState === 'Loading' && (
-                            <p className="detailMessage">Loading notes...</p>
-                          )}
-
-                          {notesState === 'Loaded' && (
-                            <div className="timelineList">
-                              <div className="notesTableHeader" aria-hidden="true">
-                                <span>Date</span>
-                                <span>Note</span>
-                                <span>Visit</span>
-                                <span>Actions</span>
-                              </div>
-
-                              {notes.length === 0 && (
-                                <p className="detailMessage">No notes found.</p>
-                              )}
-
-                              {notes.map((note) => (
-                                <article className="noteRow" key={note.id}>
-                                  <time dateTime={note.createdAt}>
-                                    {note.createdAt?.slice(0, 10)}
-                                  </time>
-                                  <strong>{note.text}</strong>
-                                  <span>{note.appointmentId || 'Standalone'}</span>
-                                  <div className="timelineActions">
-                                    <button
-                                      type="button"
-                                      onClick={() => startNoteForm('edit', note)}
-                                    >
-                                      Edit
-                                    </button>
-                                    <button type="button" onClick={() => deleteNote(note)}>
-                                      Delete
-                                    </button>
-                                  </div>
-                                </article>
-                              ))}
-
-                              <PaginationControls
-                                disabled={notesState === 'Loading'}
-                                label="Notes"
-                                pagination={notesPagination}
-                                onPrevious={previousNotesPage}
-                                onNext={nextNotesPage}
-                              />
-                            </div>
-                          )}
-                        </section>
                       )}
                     </section>
                   )}

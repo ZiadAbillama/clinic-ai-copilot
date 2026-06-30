@@ -16,11 +16,9 @@
   --patient-columns: minmax(210px, 1.35fr) minmax(118px, 0.8fr) minmax(132px, 0.9fr)
     minmax(100px, 0.75fr) minmax(58px, 0.45fr) minmax(106px, 0.72fr) minmax(110px, 0.7fr);
   --visit-columns: minmax(150px, 0.9fr) minmax(220px, 1.4fr) minmax(110px, 0.7fr)
-    minmax(120px, 0.75fr) minmax(90px, 0.55fr);
-  --timeline-columns: minmax(140px, 0.85fr) minmax(110px, 0.7fr) minmax(260px, 1.5fr)
-    minmax(120px, 0.75fr) minmax(132px, 0.75fr);
-  --notes-columns: minmax(120px, 0.75fr) minmax(280px, 1.5fr) minmax(120px, 0.75fr)
-    minmax(132px, 0.75fr);
+    minmax(120px, 0.75fr) minmax(170px, 0.9fr);
+  --timeline-columns: minmax(140px, 0.8fr) minmax(110px, 0.6fr) minmax(300px, 1.55fr)
+    minmax(130px, 0.7fr);
 }
 
 * {
@@ -827,6 +825,14 @@ h3 {
   min-width: 0;
 }
 
+.patientField::before {
+  display: none;
+}
+
+.mobilePatientMeta {
+  display: none !important;
+}
+
 .patientAvatar {
   display: inline-grid !important;
   flex: 0 0 auto;
@@ -1056,9 +1062,37 @@ h3 {
   border-radius: 4px;
 }
 
+.visitToolbar {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  min-width: 760px;
+  padding: 10px 14px;
+  background: var(--white);
+  border-bottom: 1px solid var(--line);
+}
+
+.visitToolbar button {
+  min-height: 32px;
+  padding: 0 12px;
+  color: var(--ink-soft);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.visitToolbar button:hover,
+.visitToolbar button.selected {
+  color: var(--ink);
+  background: var(--cyan-faint);
+  border-color: var(--line);
+}
+
 .visitTableHeader,
-.timelineTableHeader,
-.notesTableHeader {
+.timelineTableHeader {
   display: grid;
   gap: 14px;
   align-items: center;
@@ -1091,6 +1125,16 @@ h3 {
   border-bottom: 0;
 }
 
+.visitEmptyState {
+  min-width: 760px;
+  margin: 0;
+  padding: 18px 14px;
+  color: var(--muted);
+  background: var(--white);
+  border-bottom: 1px solid var(--line);
+  font-weight: 800;
+}
+
 .visitRow time,
 .visitRow strong,
 .visitRow span {
@@ -1106,7 +1150,9 @@ h3 {
 
 .visitRow strong {
   color: var(--ink);
-  font-weight: 900;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.35;
   overflow-wrap: anywhere;
 }
 
@@ -1134,16 +1180,6 @@ h3 {
   grid-template-columns: var(--timeline-columns);
 }
 
-.notesPanel {
-  margin-top: 24px;
-  padding-top: 18px;
-  border-top: 1px solid var(--line);
-}
-
-.notesTableHeader {
-  grid-template-columns: var(--notes-columns);
-}
-
 .timelineItem {
   display: grid;
   grid-template-columns: var(--timeline-columns);
@@ -1157,44 +1193,6 @@ h3 {
 
 .timelineItem:last-child {
   border-bottom: 0;
-}
-
-.noteRow {
-  display: grid;
-  grid-template-columns: var(--notes-columns);
-  gap: 14px;
-  align-items: center;
-  min-width: 760px;
-  padding: 12px 14px;
-  background: var(--white);
-  border-bottom: 1px solid var(--line);
-}
-
-.noteRow time,
-.noteRow strong,
-.noteRow span {
-  display: block;
-}
-
-.noteRow time {
-  color: var(--cyan);
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.noteRow strong {
-  color: var(--ink);
-  font-weight: 900;
-  line-height: 1.45;
-  overflow-wrap: anywhere;
-}
-
-.noteRow span {
-  color: var(--ink-soft);
-  font-size: 13px;
-  font-weight: 800;
-  overflow-wrap: anywhere;
 }
 
 .timelineItem time,
@@ -1213,7 +1211,9 @@ h3 {
 
 .timelineItem strong {
   color: var(--ink);
-  font-weight: 900;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.35;
   overflow-wrap: anywhere;
 }
 
@@ -1221,13 +1221,20 @@ h3 {
 .timelineItem p {
   color: var(--ink-soft);
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1.45;
   overflow-wrap: anywhere;
 }
 
 .timelineActions {
   display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.rowActions {
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   justify-content: flex-end;
 }
@@ -1254,6 +1261,16 @@ h3 {
 .timelineActions button:last-child {
   color: #9f1239;
   border-color: #fecdd3;
+}
+
+.dangerTextButton {
+  color: #9f1239 !important;
+  border-color: #fecdd3 !important;
+}
+
+.dangerTextButton:hover {
+  background: #fff1f2 !important;
+  border-color: #fb7185 !important;
 }
 
 .patientForm,
@@ -1365,6 +1382,184 @@ h3 {
   }
 }
 
+@media (max-width: 1100px) {
+  .visitList,
+  .timelineList {
+    overflow-x: visible;
+  }
+
+  .visitToolbar,
+  .visitTableHeader,
+  .visitRow,
+  .visitEmptyState,
+  .timelineTableHeader,
+  .timelineItem,
+  .visitList .paginationBar,
+  .timelineList .paginationBar {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .visitToolbar {
+    flex-wrap: wrap;
+  }
+
+  .visitTableHeader,
+  .visitRow {
+    grid-template-columns:
+      minmax(118px, 0.75fr) minmax(180px, 1fr) minmax(86px, 0.55fr) minmax(92px, 0.55fr)
+      minmax(190px, 0.9fr);
+    gap: 10px;
+  }
+
+  .timelineTableHeader,
+  .timelineItem {
+    grid-template-columns:
+      minmax(138px, 0.75fr) minmax(96px, 0.52fr) minmax(220px, 1.35fr)
+      minmax(130px, 0.7fr);
+    gap: 10px;
+  }
+
+  .visitRow,
+  .timelineItem {
+    padding: 12px 14px;
+  }
+
+  .visitEmptyState {
+    padding: 18px 14px;
+  }
+
+  .rowActions,
+  .timelineActions {
+    justify-content: flex-end;
+    width: 100%;
+  }
+
+  .rowActions button,
+  .timelineActions button {
+    flex: 1 1 82px;
+    min-width: 82px;
+  }
+
+  .visitList .paginationBar,
+  .timelineList .paginationBar {
+    align-items: center;
+    flex-direction: row;
+  }
+}
+
+@media (max-width: 900px) {
+  .patientList,
+  .visitList,
+  .timelineList {
+    overflow-x: visible;
+  }
+
+  .visitTableHeader,
+  .patientTableHeader,
+  .timelineTableHeader {
+    display: none;
+  }
+
+  .patientRow,
+  .patientSelect,
+  .visitToolbar,
+  .visitRow,
+  .visitEmptyState,
+  .timelineItem,
+  .visitList .paginationBar,
+  .timelineList .paginationBar {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .patientRow {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0;
+    align-items: stretch;
+  }
+
+  .patientSelect {
+    grid-column: auto;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    min-height: 0;
+    padding: 14px 16px;
+  }
+
+  .patientIdentity {
+    min-width: 0;
+  }
+
+  .mobilePatientMeta {
+    display: block !important;
+    margin-top: 4px !important;
+    color: #828894 !important;
+    font-family: 'Noto Sans', Arial, sans-serif !important;
+    font-size: 14px !important;
+    font-weight: 700 !important;
+  }
+
+  .patientIdentity small:not(.mobilePatientMeta),
+  .patientField:not(.patientStatusField) {
+    display: none;
+  }
+
+  .patientStatusField {
+    align-self: center;
+    justify-self: end;
+    min-width: 0;
+  }
+
+  .patientField::before {
+    display: none;
+  }
+
+  .patientRowActions {
+    align-items: center;
+    justify-content: center;
+    width: 96px;
+    padding: 12px 14px 12px 0;
+  }
+
+  .patientRowActions button {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .visitToolbar {
+    flex-wrap: wrap;
+  }
+
+  .visitRow,
+  .timelineItem {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 14px;
+  }
+
+  .visitEmptyState {
+    padding: 18px 14px;
+  }
+
+  .rowActions,
+  .timelineActions {
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .rowActions button,
+  .timelineActions button {
+    flex: 1 1 112px;
+    min-width: 0;
+  }
+
+  .paginationBar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
 @media (max-width: 720px) {
   .topBar {
     align-items: flex-start;
@@ -1458,18 +1653,45 @@ h3 {
     grid-template-columns: 1fr;
   }
 
-  .timelineItem,
-  .noteRow {
-    grid-template-columns: auto minmax(0, 1fr);
+  .detailGrid,
+  .patientSelect {
+    grid-template-columns: 1fr;
   }
 
+  .visitRow,
+  .timelineItem {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 14px;
+  }
+
+  .rowActions,
   .timelineActions {
-    grid-column: 2;
+    justify-content: flex-start;
   }
 
-  .paginationBar {
+  .visitList .paginationBar,
+  .timelineList .paginationBar {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .patientRow {
+    grid-template-columns: 1fr;
+  }
+
+  .patientStatusField {
+    justify-self: start;
+  }
+
+  .patientRowActions {
+    justify-content: flex-start;
+    width: auto;
+    padding: 0 14px 14px;
+  }
+
+  .patientRowActions button {
+    flex: 1 1 120px;
   }
 }
 
