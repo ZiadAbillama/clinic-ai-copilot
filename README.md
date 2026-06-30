@@ -1,10 +1,10 @@
 # Clinic AI Copilot
 
-Clinic AI Copilot is a doctor-facing clinic workspace built as a staged training project. The current app focuses on secure provider access, patient records, visits, notes, and patient timelines backed by MongoDB Atlas.
+Clinic AI Copilot is a doctor-facing clinic workspace built as a staged training project. The current app focuses on secure provider access, patient records, visits, notes, patient timelines, and doctor-reviewed AI summaries backed by MongoDB Atlas.
 
 ## Current Stage
 
-Current stage: Stage 7 complete - patient, visit, note, and timeline workflow.
+Current stage: Stage 8 complete - appointment note workflow with Ollama AI draft review.
 
 Implemented:
 
@@ -14,11 +14,12 @@ Implemented:
 - MongoDB Atlas storage through Mongoose
 - Patient management with soft archive delete behavior
 - Visits, notes, and patient timeline views with archive behavior
+- Appointment workspace with doctor note entry and AI draft summary review
 - Pagination for patients, visits, notes, and timeline endpoints
 
 Not yet implemented:
 
-- AI health summaries and semantic search
+- Note search and semantic search
 - Production deployment pipeline
 - Full role-based access control beyond the doctor role
 
@@ -28,6 +29,7 @@ Not yet implemented:
 - Frontend: React, Vite, JavaScript
 - Backend: Node.js, Express, JavaScript
 - Database: MongoDB Atlas with Mongoose
+- AI: local Ollama, default model `llama3.1:8b`
 - Auth: JWT, bcrypt password hashing
 - Styling/assets: app-local CSS and CliniKit visual assets
 
@@ -66,6 +68,14 @@ Frontend:
 VITE_API_BASE_URL=http://localhost:3001
 ```
 
+AI:
+
+```env
+OLLAMA_URL=http://localhost:11434
+OLLAMA_MODEL=llama3.1:8b
+OLLAMA_TIMEOUT_MS=45000
+```
+
 For local development, the frontend falls back to `http://localhost:3001`. Production builds require `VITE_API_BASE_URL`.
 
 ## Startup Flow
@@ -86,6 +96,13 @@ Start the API:
 
 ```bash
 yarn api:dev
+```
+
+For AI summaries, start Ollama separately and make sure the configured model is installed:
+
+```bash
+ollama pull llama3.1:8b
+ollama serve
 ```
 
 Start the web app in a second terminal:
@@ -115,3 +132,4 @@ yarn web:build
 - MongoDB Atlas is the shared development database path for this project.
 - Patient delete currently archives patient records and related visits/notes instead of hard-deleting them.
 - `noteCount` is calculated from notes by the API and is not editable in the patient form.
+- AI summaries are drafts until a doctor accepts or rejects them. Editing the original note invalidates prior summaries.

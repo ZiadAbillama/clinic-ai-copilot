@@ -6,9 +6,8 @@ Legend: Completed / Partial / Planned
 ## 1. Product
 
 Clinic AI Copilot is a simplified AI-assisted clinic workspace for doctors. Each
-doctor manages their own patients, visits, and medical notes, and will later use a
-local AI model to draft note summaries that the doctor must review before they
-count.
+doctor manages their own patients, visits, and medical notes, and can use a local
+AI model to draft note summaries that the doctor must review before they count.
 
 Core workflow: doctor opens today's appointment -> reviews patient and visit
 context -> writes the clinical note normally -> asks AI to draft a summary only
@@ -23,7 +22,7 @@ reviewed summary is saved with the original doctor note.
 | Frontend | React with Vite                                                      | Completed |
 | Backend  | Node.js with Express (single API service)                            | Completed |
 | Database | MongoDB only, via Mongoose (no PostgreSQL)                           | Completed |
-| AI       | Local Ollama server, model `llama3.1:8b` at `http://localhost:11434` | Planned   |
+| AI       | Local Ollama server, model `llama3.1:8b` at `http://localhost:11434` | Completed |
 | Auth     | Multiple doctors, isolated data, real JWT                            | Completed |
 | Search   | MongoDB text search (semantic later)                                 | Planned   |
 | Infra    | Docker Compose (later)                                               | Planned   |
@@ -44,8 +43,8 @@ reviewed summary is saved with the original doctor note.
 | 3   | Appointments (visits) | Patient visit history, scheduling, editing, archive behavior | Completed |
 | 4   | Medical notes         | Attached to a visit or standalone on a patient               | Completed |
 | 5   | Patient timeline      | Merged visits + notes, newest-first                          | Completed |
-| 6   | AI summarization      | Local Ollama drafts a note summary after doctor note exists  | Planned   |
-| 7   | AI review             | Draft -> Approved / Rejected; only Approved counts           | Planned   |
+| 6   | AI summarization      | Local Ollama drafts a note summary after doctor note exists  | Completed |
+| 7   | AI review             | Draft -> Approved / Rejected; only Approved counts           | Completed |
 | 8   | Note search           | MongoDB text search over notes                               | Planned   |
 | 9   | Audit log             | Record key doctor actions                                    | Partial   |
 | 10  | Auth                  | Multiple doctors, isolated data, JWT                         | Completed |
@@ -64,9 +63,10 @@ reviewed summary is saved with the original doctor note.
 - **Medical notes (Completed):** notes can be created, edited, archived, and linked
   to a visit or saved as standalone patient notes.
 - **Patient timeline (Completed):** timeline API and UI merge visits + notes,
-  newest-first. AI summaries are not shown yet.
-- **Audit log (Partial):** AuditLog model exists and patient, appointment, and note
-  create/update/archive actions are recorded. A full audit viewer is not built yet.
+  newest-first.
+- **Audit log (Partial):** AuditLog model exists and patient, appointment, note,
+  and AI summary review actions are recorded. A full audit viewer is not built
+  yet.
 - **Auth (Completed):** doctors can register/login with JWT. Patient,
   appointment, note, timeline, and audit routes are scoped to the authenticated
   doctor. The seed script creates a demo doctor for existing starter data.
@@ -75,12 +75,12 @@ reviewed summary is saved with the original doctor note.
 - **Notes:** a note may link to a visit (`appointmentId`) or be standalone
   (`appointmentId = null`).
 - **Appointment workspace:** opening an appointment shows patient context at the
-  top, visit reason, a previous visits action, and a clinical note textarea. Real
-  AI summary generation/review is the next Stage 8 step and should appear only
-  after a doctor note exists.
-- **AI review:** planned for Stage 8. An AI summary will be `draft` until the
-  doctor accepts/edits it into a reviewed summary or rejects it. The original
-  doctor note remains saved separately from the AI-generated draft.
+  top, visit reason, a previous visits action, and a clinical note textarea. AI
+  summary generation/review appears only after a doctor note exists.
+- **AI review:** an AI summary is `draft` until the doctor accepts/edits it into
+  a reviewed summary or rejects it. The original doctor note remains saved
+  separately from the AI-generated draft. Editing the original note invalidates
+  prior summaries.
 
 ## 5. Data Model (MongoDB / Mongoose)
 
@@ -93,8 +93,8 @@ Every collection is owned by `doctorId`.
   reason, status, archivedAt
 - **Note** - doctorId, patientId, appointmentId (nullable = standalone), text,
   archivedAt
-- **AiSummary** - doctorId, noteId, text, status (`draft`/`approved`/`rejected`),
-  reviewedAt
+- **AiSummary** - doctorId, noteId, text, shortSummary, keySymptoms, assessment,
+  plan, status (`draft`/`approved`/`rejected`), reviewedAt
 - **AuditLog** - doctorId, action, targetType, targetId, timestamp
 
 **Timeline:** for one patient, merge that patient's Appointments + Notes (scoped
@@ -121,12 +121,13 @@ Current (JWT-protected unless noted):
 - `POST /api/notes` - create a standalone or visit-linked note
 - `PATCH /api/notes/:id` - update a note
 - `DELETE /api/notes/:id` - archive a note
+- `GET /api/notes/:id/summary` - latest non-rejected AI summary for a note
+- `POST /api/notes/:id/summarize` - generate an Ollama draft summary
+- `PATCH /api/summaries/:id` - approve/reject an AI summary
 - `GET /api/patients/:id/timeline` - merged visits + notes for one patient
 
 Planned:
 
-- `POST /api/notes/:id/summarize` - generate an Ollama draft summary
-- `PATCH /api/summaries/:id` - approve/reject an AI summary
 - `GET /api/notes/search?q=` - text search over notes
 - Audit log viewer
 
@@ -142,7 +143,7 @@ Planned:
 | 5     | Auth (JWT, multi-doctor, data isolation)    | Completed |
 | 6     | Patients + visits + notes CRUD              | Completed |
 | 7     | Patient timeline                            | Completed |
-| 8     | AI summarization (Ollama) + review workflow | Planned   |
+| 8     | AI summarization (Ollama) + review workflow | Completed |
 | 9     | Note search + audit log                     | Planned   |
 | 10    | Dockerize + deployment                      | Planned   |
 
@@ -154,5 +155,6 @@ Planned:
   with empty patient data by design.
 - Appointment persistence, patient visit history, scheduling/editing, and archive
   behavior exist.
-- Notes CRUD and the patient timeline exist; AI summaries are not attached yet.
-- No AI summary generation/review, note search, or full audit viewer yet.
+- Ollama must be running locally and the configured model must be installed for
+  AI draft generation to work.
+- Note search and the full audit viewer are not built yet.

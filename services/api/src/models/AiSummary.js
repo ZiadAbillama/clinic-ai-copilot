@@ -21,6 +21,26 @@ const aiSummarySchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    shortSummary: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    keySymptoms: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    assessment: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    plan: {
+      type: String,
+      default: '',
+      trim: true,
+    },
     status: {
       type: String,
       enum: ['draft', 'approved', 'rejected'],
@@ -37,6 +57,6 @@ const aiSummarySchema = new mongoose.Schema(
 );
 
 aiSummarySchema.index({ doctorId: 1, id: 1 }, { unique: true });
-aiSummarySchema.index({ doctorId: 1, noteId: 1 });
+aiSummarySchema.index({ doctorId: 1, noteId: 1, updatedAt: -1 });
 
 export const AiSummary = mongoose.models.AiSummary || mongoose.model('AiSummary', aiSummarySchema);

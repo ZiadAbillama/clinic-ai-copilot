@@ -1049,7 +1049,8 @@ h3 {
 
 .appointmentPageHeader button,
 .appointmentContextHeader button,
-.appointmentNoteActions button {
+.appointmentNoteActions button,
+.aiSummaryActions button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1065,13 +1066,15 @@ h3 {
 
 .appointmentPageHeader button:hover,
 .appointmentContextHeader button:hover,
-.appointmentNoteActions button:hover {
+.appointmentNoteActions button:hover,
+.aiSummaryActions button:hover {
   border-color: var(--cyan);
 }
 
 .appointmentContextPanel,
 .previousVisitsPanel,
-.clinicalNotePanel {
+.clinicalNotePanel,
+.aiSummaryPanel {
   padding-top: 18px;
   border-top: 1px solid var(--line);
 }
@@ -1090,7 +1093,9 @@ h3 {
 
 .appointmentInfoGrid dt,
 .appointmentReasonBlock span,
-.clinicalNotePanel label > span {
+.clinicalNotePanel label > span,
+.aiSummarySections dt,
+.aiSummaryEditor label {
   color: var(--muted);
   font-size: 12px;
   font-weight: 800;
@@ -1167,6 +1172,82 @@ h3 {
 }
 
 .appointmentNoteActions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
+}
+
+.aiSummaryPanel {
+  display: grid;
+  gap: 16px;
+}
+
+.aiSummaryHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.aiSummarySections {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 22px;
+  margin: 0;
+}
+
+.aiSummarySections div {
+  min-width: 0;
+}
+
+.aiSummarySections dd {
+  margin: 6px 0 0;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.aiSummaryEditor {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.aiSummaryEditor label {
+  display: grid;
+  gap: 8px;
+}
+
+.aiSummaryEditor textarea {
+  width: 100%;
+  min-height: 96px;
+  padding: 12px;
+  color: var(--ink);
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font:
+    800 14px/1.45 'Figtree',
+    Arial,
+    sans-serif;
+  resize: vertical;
+  text-transform: none;
+}
+
+.aiSummaryEditor textarea:focus {
+  outline: 4px solid rgba(18, 184, 232, 0.22);
+  border-color: var(--cyan);
+}
+
+.aiSummaryActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.aiSummaryActions button:disabled {
   cursor: not-allowed;
   opacity: 0.56;
 }
@@ -1896,8 +1977,22 @@ h3 {
     justify-content: stretch;
   }
 
-  .appointmentNoteActions button {
+  .appointmentNoteActions button,
+  .aiSummaryActions button {
     flex: 1 1 180px;
+  }
+
+  .aiSummaryHeader {
+    flex-direction: column;
+  }
+
+  .aiSummarySections,
+  .aiSummaryEditor {
+    grid-template-columns: 1fr;
+  }
+
+  .aiSummaryActions {
+    justify-content: stretch;
   }
 
   .panelHeader {

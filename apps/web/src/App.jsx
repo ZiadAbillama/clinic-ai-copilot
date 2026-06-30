@@ -88,6 +88,13 @@ const emptyNoteForm = {
   text: '',
 };
 
+const emptyAiSummaryDraft = {
+  shortSummary: '',
+  keySymptoms: '',
+  assessment: '',
+  plan: '',
+};
+
 const emptyAuthForm = {
   name: '',
   email: '',
@@ -205,6 +212,11 @@ export default function App() {
   const [appointmentNoteText, setAppointmentNoteText] = useState('');
   const [appointmentNoteStatus, setAppointmentNoteStatus] = useState('Idle');
   const [appointmentNoteError, setAppointmentNoteError] = useState('');
+  const [aiSummary, setAiSummary] = useState(null);
+  const [aiSummaryDraft, setAiSummaryDraft] = useState(emptyAiSummaryDraft);
+  const [aiSummaryStatus, setAiSummaryStatus] = useState('Idle');
+  const [aiSummaryError, setAiSummaryError] = useState('');
+  const [aiSummaryEditing, setAiSummaryEditing] = useState(false);
   const [previousVisitsOpen, setPreviousVisitsOpen] = useState(false);
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [timeline, setTimeline] = useState([]);
@@ -231,6 +243,11 @@ export default function App() {
     setActiveAppointment(null);
     setAppointmentNote(null);
     setAppointmentNoteText('');
+    setAiSummary(null);
+    setAiSummaryDraft({ ...emptyAiSummaryDraft });
+    setAiSummaryStatus('Idle');
+    setAiSummaryError('');
+    setAiSummaryEditing(false);
     setSelectedPatientId('');
     setSelectedPatient(null);
     setAuthStatus('Idle');
@@ -257,6 +274,41 @@ export default function App() {
         return res;
       }),
     [authToken, clearSession],
+  );
+
+  const resetAiSummaryState = useCallback(() => {
+    setAiSummary(null);
+    setAiSummaryDraft({ ...emptyAiSummaryDraft });
+    setAiSummaryStatus('Idle');
+    setAiSummaryError('');
+    setAiSummaryEditing(false);
+  }, []);
+
+  const applyAiSummary = useCallback(
+    (summary) => {
+      if (!summary) {
+        resetAiSummaryState();
+        return;
+      }
+
+      setAiSummary(summary);
+      setAiSummaryDraft({
+        shortSummary: summary.shortSummary || '',
+        keySymptoms: summary.keySymptoms || '',
+        assessment: summary.assessment || '',
+        plan: summary.plan || '',
+      });
+      setAiSummaryStatus(
+        summary.status === 'approved'
+          ? 'Reviewed'
+          : summary.status === 'rejected'
+            ? 'Rejected'
+            : 'Draft',
+      );
+      setAiSummaryError('');
+      setAiSummaryEditing(false);
+    },
+    [resetAiSummaryState],
   );
 
   const refreshWorkspace = useCallback(
@@ -557,6 +609,7 @@ export default function App() {
     setAppointmentNoteText('');
     setAppointmentNoteStatus('Loading');
     setAppointmentNoteError('');
+    resetAiSummaryState();
     setPreviousVisitsOpen(false);
     setVisitsOpen(false);
     setTimelineOpen(false);
@@ -573,6 +626,7 @@ export default function App() {
     setAppointmentNoteText('');
     setAppointmentNoteStatus('Idle');
     setAppointmentNoteError('');
+    resetAiSummaryState();
     setPreviousVisitsOpen(false);
   }
 
@@ -649,6 +703,37 @@ export default function App() {
         });
     },
     [activeAppointment, apiFetch, authToken],
+  );
+
+  const loadAiSummary = useCallback(
+    (note) => {
+      if (!note?.id || !authToken) {
+        resetAiSummaryState();
+        return Promise.resolve(null);
+      }
+
+      setAiSummaryStatus('Loading');
+      setAiSummaryError('');
+
+      return apiFetch(`/api/notes/${encodeURIComponent(note.id)}/summary`)
+        .then(async (res) => {
+          if (!res.ok) throw res;
+          return res.json();
+        })
+        .then((data) => {
+          applyAiSummary(data.summary || null);
+          return data.summary || null;
+        })
+        .catch(() => {
+          setAiSummary(null);
+          setAiSummaryDraft({ ...emptyAiSummaryDraft });
+          setAiSummaryStatus('Error');
+          setAiSummaryError('Could not load the AI summary.');
+          setAiSummaryEditing(false);
+          return null;
+        });
+    },
+    [apiFetch, applyAiSummary, authToken, resetAiSummaryState],
   );
 
   function toggleTimeline() {
@@ -936,11 +1021,86 @@ export default function App() {
       return;
     }
 
-    setNotice({
-      tone: 'success',
-      title: 'AI summary is next',
-      text: 'The note is saved. The Ollama summary and doctor review panel come next.',
-    });
+    setAiSummaryStatus('Generating');
+    setAiSummaryError('');
+    setAiSummaryEditing(false);
+
+    apiFetch(`/api/notes/${encodeURIComponent(appointmentNote.id)}/summarize`, {
+      method: 'POST',
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || 'Could not generate AI summary.');
+        }
+
+        return res.json();
+      })
+      .then((summary) => {
+        applyAiSummary(summary);
+        setNotice({
+          tone: 'success',
+          title: 'AI draft ready',
+          text: 'Review the draft before saving it.',
+        });
+      })
+      .catch(() => {
+        setAiSummary(null);
+        setAiSummaryStatus('Error');
+        setAiSummaryError('Could not generate AI summary. Check Ollama and try again.');
+      });
+  }
+
+  function handleAiSummaryDraftChange(event) {
+    const { name, value } = event.target;
+    setAiSummaryDraft((currentDraft) => ({
+      ...currentDraft,
+      [name]: value,
+    }));
+    setAiSummaryError('');
+  }
+
+  function reviewAiSummary(status) {
+    if (!aiSummary) return;
+
+    const body =
+      status === 'approved'
+        ? {
+            ...aiSummaryDraft,
+            status,
+          }
+        : { status };
+
+    setAiSummaryStatus('SavingReview');
+    setAiSummaryError('');
+
+    apiFetch(`/api/summaries/${encodeURIComponent(aiSummary.id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || 'Could not save AI summary review.');
+        }
+
+        return res.json();
+      })
+      .then((summary) => {
+        applyAiSummary(summary);
+        setNotice({
+          tone: 'success',
+          title: status === 'approved' ? 'Summary accepted' : 'Summary rejected',
+          text:
+            status === 'approved'
+              ? 'The reviewed AI summary is saved with the note.'
+              : 'The AI draft was rejected.',
+        });
+      })
+      .catch(() => {
+        setAiSummaryStatus('Error');
+        setAiSummaryError('Could not save the AI summary review.');
+      });
   }
 
   function handleAuthChange(event) {
@@ -1076,6 +1236,15 @@ export default function App() {
   }, [activeAppointment, loadAppointmentNote]);
 
   useEffect(() => {
+    if (!appointmentNote?.id) {
+      resetAiSummaryState();
+      return;
+    }
+
+    loadAiSummary(appointmentNote);
+  }, [appointmentNote, loadAiSummary, resetAiSummaryState]);
+
+  useEffect(() => {
     if (!timelineOpen) return;
 
     loadTimeline();
@@ -1140,6 +1309,10 @@ export default function App() {
 
     return () => window.clearTimeout(timeoutId);
   }, [notice]);
+
+  const showAiSummaryPanel =
+    Boolean(aiSummary) || ['Generating', 'SavingReview', 'Error'].includes(aiSummaryStatus);
+  const isAiSummaryBusy = aiSummaryStatus === 'Generating' || aiSummaryStatus === 'SavingReview';
 
   const patientFormSection = (
     <section className="formCard" aria-labelledby="patient-form-title">
@@ -1554,7 +1727,10 @@ export default function App() {
                   onChange={(event) => {
                     setAppointmentNoteText(event.target.value);
                     setAppointmentNoteError('');
-                    if (appointmentNoteStatus === 'Saved') setAppointmentNoteStatus('Editing');
+                    if (appointmentNoteStatus === 'Saved') {
+                      setAppointmentNoteStatus('Editing');
+                      resetAiSummaryState();
+                    }
                   }}
                   placeholder="Write clinical note here..."
                   rows={12}
@@ -1580,6 +1756,120 @@ export default function App() {
                 </button>
               </div>
             </form>
+
+            {showAiSummaryPanel && (
+              <section className="aiSummaryPanel" aria-labelledby="ai-summary-title">
+                <div className="aiSummaryHeader">
+                  <div>
+                    <p className="eyebrow">AI draft summary</p>
+                    <h3 id="ai-summary-title">Review before saving</h3>
+                  </div>
+                  {aiSummary && <span className="statusPill">{aiSummary.status}</span>}
+                </div>
+
+                {aiSummaryStatus === 'Generating' && (
+                  <p className="formMessage">Generating draft summary...</p>
+                )}
+                {aiSummaryError && <p className="formMessage error">{aiSummaryError}</p>}
+
+                {aiSummary && (
+                  <>
+                    {aiSummaryEditing ? (
+                      <div className="aiSummaryEditor">
+                        <label>
+                          Short summary
+                          <textarea
+                            name="shortSummary"
+                            value={aiSummaryDraft.shortSummary}
+                            onChange={handleAiSummaryDraftChange}
+                            rows={3}
+                          />
+                        </label>
+                        <label>
+                          Key symptoms
+                          <textarea
+                            name="keySymptoms"
+                            value={aiSummaryDraft.keySymptoms}
+                            onChange={handleAiSummaryDraftChange}
+                            rows={3}
+                          />
+                        </label>
+                        <label>
+                          Assessment
+                          <textarea
+                            name="assessment"
+                            value={aiSummaryDraft.assessment}
+                            onChange={handleAiSummaryDraftChange}
+                            rows={3}
+                          />
+                        </label>
+                        <label>
+                          Plan / follow-up
+                          <textarea
+                            name="plan"
+                            value={aiSummaryDraft.plan}
+                            onChange={handleAiSummaryDraftChange}
+                            rows={3}
+                          />
+                        </label>
+                      </div>
+                    ) : (
+                      <dl className="aiSummarySections">
+                        <div>
+                          <dt>Short summary</dt>
+                          <dd>{aiSummaryDraft.shortSummary || 'Not documented.'}</dd>
+                        </div>
+                        <div>
+                          <dt>Key symptoms</dt>
+                          <dd>{aiSummaryDraft.keySymptoms || 'Not documented.'}</dd>
+                        </div>
+                        <div>
+                          <dt>Assessment</dt>
+                          <dd>{aiSummaryDraft.assessment || 'Not documented.'}</dd>
+                        </div>
+                        <div>
+                          <dt>Plan / follow-up</dt>
+                          <dd>{aiSummaryDraft.plan || 'Not documented.'}</dd>
+                        </div>
+                      </dl>
+                    )}
+
+                    <div className="aiSummaryActions">
+                      <button
+                        className="primaryButton"
+                        disabled={isAiSummaryBusy || aiSummary.status === 'rejected'}
+                        type="button"
+                        onClick={() => reviewAiSummary('approved')}
+                      >
+                        {aiSummaryStatus === 'SavingReview' ? 'Saving...' : 'Accept summary'}
+                      </button>
+                      <button
+                        disabled={isAiSummaryBusy || aiSummary.status === 'rejected'}
+                        type="button"
+                        onClick={() => setAiSummaryEditing((current) => !current)}
+                      >
+                        {aiSummaryEditing ? 'Stop editing' : 'Edit'}
+                      </button>
+                      <button
+                        disabled={isAiSummaryBusy}
+                        type="button"
+                        onClick={handleGenerateAiSummary}
+                      >
+                        Regenerate
+                      </button>
+                      <button
+                        className="dangerTextButton"
+                        disabled={isAiSummaryBusy || aiSummary.status === 'rejected'}
+                        type="button"
+                        onClick={() => reviewAiSummary('rejected')}
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  </>
+                )}
+              </section>
+            )}
           </section>
         ) : (
           <>

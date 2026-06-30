@@ -3,8 +3,16 @@ import express from 'express';
 import cors from 'cors';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { CORS_ORIGINS, JWT_EXPIRES_IN, JWT_SECRET } from './config.js';
+import {
+  CORS_ORIGINS,
+  JWT_EXPIRES_IN,
+  JWT_SECRET,
+  OLLAMA_MODEL,
+  OLLAMA_TIMEOUT_MS,
+  OLLAMA_URL,
+} from './config.js';
 import { connectDatabase } from './db.js';
+import { AiSummary } from './models/AiSummary.js';
 import { AuditLog } from './models/AuditLog.js';
 import { Appointment } from './models/Appointment.js';
 import { Doctor } from './models/Doctor.js';
@@ -17,6 +25,7 @@ const port = process.env.API_PORT || 3001;
 const patientPublicFields = '-_id -__v -doctorId -createdAt -updatedAt -archivedAt';
 const appointmentPublicFields = '-_id -__v -doctorId -createdAt -updatedAt -archivedAt';
 const notePublicFields = '-_id -__v -doctorId -archivedAt';
+const aiSummaryPublicFields = '-_id -__v -doctorId';
 const visitStatusSet = new Set(visitStatuses);
 const datePattern = /^\d{4}-\d{2}-\d{2}$/;
 const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -35,6 +44,13 @@ const appointmentFieldMaxLengths = {
   scheduledTime: 5,
   reason: 160,
   status: 32,
+};
+const aiSummaryStatuses = new Set(['approved', 'rejected']);
+const aiSummaryFieldMaxLengths = {
+  shortSummary: 1200,
+  keySymptoms: 1200,
+  assessment: 1200,
+  plan: 1200,
 };
 
 function getTodayDateString() {
@@ -157,6 +173,10 @@ function createNoteId() {
   return `N-${Date.now().toString(36).toUpperCase()}`;
 }
 
+function createAiSummaryId() {
+  return `S-${Date.now().toString(36).toUpperCase()}`;
+}
+
 function createAuditLogId() {
   return `L-${Date.now().toString(36).toUpperCase()}`;
 }
@@ -256,6 +276,162 @@ function cleanNoteInput(input = {}, { partial = false } = {}) {
   }
 
   return cleaned;
+}
+
+function cleanAiSummarySections(input = {}) {
+  const cleaned = {};
+
+  for (const field of Object.keys(aiSummaryFieldMaxLengths)) {
+    cleaned[field] = String(input[field] ?? '').trim();
+  }
+
+  validateMaxLengths(cleaned, aiSummaryFieldMaxLengths);
+  return cleaned;
+}
+
+function combineAiSummarySections(summary) {
+  return [
+    summary.shortSummary ? `Short summary: ${summary.shortSummary}` : '',
+    summary.keySymptoms ? `Key symptoms: ${summary.keySymptoms}` : '',
+    summary.assessment ? `Assessment: ${summary.assessment}` : '',
+    summary.plan ? `Plan/follow-up: ${summary.plan}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+}
+
+function cleanAiSummaryReviewInput(input = {}) {
+  const status = String(input.status ?? '')
+    .trim()
+    .toLowerCase();
+
+  if (!aiSummaryStatuses.has(status)) {
+    throw createInputError('status must be approved or rejected.');
+  }
+
+  if (status === 'rejected') {
+    return { status };
+  }
+
+  const cleaned = cleanAiSummarySections(input);
+  const text = combineAiSummarySections(cleaned);
+
+  if (!text) {
+    throw createInputError('Approved summary cannot be empty.');
+  }
+
+  return {
+    ...cleaned,
+    status,
+    text,
+  };
+}
+
+function buildAiSummaryPrompt({ appointment, note, patient }) {
+  const patientContext = [
+    `Patient name: ${patient.name || 'Not recorded'}`,
+    `Date of birth: ${patient.dob || 'Not recorded'}`,
+    `Contact: ${patient.contact || 'Not recorded'}`,
+    `Patient ID: ${patient.id}`,
+  ].join('\n');
+  const appointmentContext = appointment
+    ? [
+        `Appointment date: ${appointment.scheduledDate || 'Not recorded'}`,
+        `Appointment time: ${appointment.scheduledTime || 'Not recorded'}`,
+        `Appointment reason: ${appointment.reason || 'Not recorded'}`,
+        `Appointment status: ${appointment.status || 'Not recorded'}`,
+      ].join('\n')
+    : 'No appointment context recorded.';
+
+  return [
+    'You are assisting a doctor by drafting a concise clinical note summary.',
+    'Use only the provided information. Do not invent diagnoses, medications, or follow-up steps.',
+    'Return only valid JSON with these exact keys: shortSummary, keySymptoms, assessment, plan.',
+    'If a section is not documented, write "Not documented." for that value.',
+    '',
+    'Patient context:',
+    patientContext,
+    '',
+    'Appointment context:',
+    appointmentContext,
+    '',
+    'Doctor note:',
+    note.text,
+  ].join('\n');
+}
+
+function parseAiSummaryResponse(rawResponse) {
+  const responseText = String(rawResponse ?? '').trim();
+
+  if (!responseText) {
+    throw createInputError('AI summary response was empty.');
+  }
+
+  let parsed;
+
+  try {
+    parsed = JSON.parse(responseText);
+  } catch {
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      parsed = { shortSummary: responseText };
+    } else {
+      parsed = JSON.parse(jsonMatch[0]);
+    }
+  }
+
+  const cleaned = cleanAiSummarySections(parsed);
+  const text = combineAiSummarySections(cleaned);
+
+  if (!text) {
+    throw createInputError('AI summary response was empty.');
+  }
+
+  return {
+    ...cleaned,
+    text,
+  };
+}
+
+async function requestAiSummary(context) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), OLLAMA_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(`${OLLAMA_URL.replace(/\/$/, '')}/api/generate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: OLLAMA_MODEL,
+        prompt: buildAiSummaryPrompt(context),
+        stream: false,
+        format: 'json',
+      }),
+    });
+
+    if (!response.ok) {
+      const error = new Error('AI provider request failed.');
+      error.name = 'AiProviderError';
+      error.status = response.status;
+      throw error;
+    }
+
+    const payload = await response.json();
+    return parseAiSummaryResponse(payload?.response);
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      const timeoutError = new Error('AI provider request timed out.');
+      timeoutError.name = 'AiProviderTimeout';
+      throw timeoutError;
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 async function requireAuth(req, res, next) {
@@ -795,6 +971,9 @@ app.patch('/api/notes/:id', async (req, res) => {
       }
     }
 
+    const shouldInvalidateAiSummary =
+      Object.hasOwn(payload, 'text') && payload.text !== existingNote.text;
+
     delete payload.patientId;
 
     const note = await Note.findOneAndUpdate(
@@ -804,6 +983,17 @@ app.patch('/api/notes/:id', async (req, res) => {
     )
       .select(notePublicFields)
       .lean();
+
+    if (shouldInvalidateAiSummary) {
+      const invalidatedSummaries = await AiSummary.updateMany(
+        { doctorId: req.doctor.id, noteId: note.id, status: { $ne: 'rejected' } },
+        { $set: { status: 'rejected', reviewedAt: new Date() } },
+      );
+
+      if (invalidatedSummaries.modifiedCount > 0) {
+        await writeAuditLog(req.doctor.id, 'ai_summary.invalidated', 'Note', note.id);
+      }
+    }
 
     await writeAuditLog(req.doctor.id, 'note.updated', 'Note', note.id);
     res.json(note);
@@ -847,6 +1037,177 @@ app.delete('/api/notes/:id', async (req, res) => {
   } catch (error) {
     logApiError('notes.delete_failed', error);
     res.status(500).json({ error: 'Failed to delete note' });
+  }
+});
+
+app.get('/api/notes/:id/summary', async (req, res) => {
+  try {
+    const note = await Note.findOne({
+      doctorId: req.doctor.id,
+      id: req.params.id,
+      archivedAt: null,
+    }).lean();
+
+    if (!note) {
+      res.status(404).json({ error: 'Note not found' });
+      return;
+    }
+
+    const summary = await AiSummary.findOne({
+      doctorId: req.doctor.id,
+      noteId: note.id,
+      status: { $ne: 'rejected' },
+    })
+      .sort({ updatedAt: -1 })
+      .select(aiSummaryPublicFields)
+      .lean();
+
+    res.json({ summary: summary || null });
+  } catch (error) {
+    logApiError('ai_summary.read_failed', error);
+    res.status(500).json({ error: 'Failed to load AI summary' });
+  }
+});
+
+app.post('/api/notes/:id/summarize', async (req, res) => {
+  try {
+    const note = await Note.findOne({
+      doctorId: req.doctor.id,
+      id: req.params.id,
+      archivedAt: null,
+    })
+      .select(notePublicFields)
+      .lean();
+
+    if (!note) {
+      res.status(404).json({ error: 'Note not found' });
+      return;
+    }
+
+    const [patient, appointment] = await Promise.all([
+      Patient.findOne({
+        doctorId: req.doctor.id,
+        id: note.patientId,
+        archivedAt: null,
+      })
+        .select(patientPublicFields)
+        .lean(),
+      note.appointmentId
+        ? Appointment.findOne({
+            doctorId: req.doctor.id,
+            id: note.appointmentId,
+            patientId: note.patientId,
+            archivedAt: null,
+          })
+            .select(appointmentPublicFields)
+            .lean()
+        : Promise.resolve(null),
+    ]);
+
+    if (!patient) {
+      res.status(404).json({ error: 'Patient not found' });
+      return;
+    }
+
+    const generatedSummary = await requestAiSummary({
+      appointment,
+      note,
+      patient,
+    });
+
+    const summary = await AiSummary.findOneAndUpdate(
+      {
+        doctorId: req.doctor.id,
+        noteId: note.id,
+        status: 'draft',
+      },
+      {
+        $set: {
+          ...generatedSummary,
+          status: 'draft',
+          reviewedAt: null,
+        },
+        $setOnInsert: {
+          doctorId: req.doctor.id,
+          noteId: note.id,
+          id: createAiSummaryId(),
+        },
+      },
+      {
+        new: true,
+        runValidators: true,
+        upsert: true,
+      },
+    )
+      .select(aiSummaryPublicFields)
+      .lean();
+
+    await writeAuditLog(req.doctor.id, 'ai_summary.generated', 'AiSummary', summary.id);
+    res.status(201).json(summary);
+  } catch (error) {
+    if (isInputError(error)) {
+      res.status(502).json({ error: 'AI summary service returned an invalid draft.' });
+      return;
+    }
+
+    if (error.name === 'AiProviderError' || error.name === 'AiProviderTimeout') {
+      logApiError('ai_summary.generate_failed', error);
+      res.status(502).json({ error: 'AI summary service is unavailable' });
+      return;
+    }
+
+    logApiError('ai_summary.generate_failed', error);
+    res.status(500).json({ error: 'Failed to generate AI summary' });
+  }
+});
+
+app.patch('/api/summaries/:id', async (req, res) => {
+  try {
+    const payload = cleanAiSummaryReviewInput(req.body);
+    const existingSummary = await AiSummary.findOne({
+      doctorId: req.doctor.id,
+      id: req.params.id,
+    }).lean();
+
+    if (!existingSummary) {
+      res.status(404).json({ error: 'AI summary not found' });
+      return;
+    }
+
+    const update =
+      payload.status === 'approved'
+        ? {
+            ...payload,
+            reviewedAt: new Date(),
+          }
+        : {
+            status: 'rejected',
+            reviewedAt: new Date(),
+          };
+
+    const summary = await AiSummary.findOneAndUpdate(
+      { doctorId: req.doctor.id, id: req.params.id },
+      { $set: update },
+      { new: true, runValidators: true },
+    )
+      .select(aiSummaryPublicFields)
+      .lean();
+
+    await writeAuditLog(
+      req.doctor.id,
+      payload.status === 'approved' ? 'ai_summary.approved' : 'ai_summary.rejected',
+      'AiSummary',
+      summary.id,
+    );
+    res.json(summary);
+  } catch (error) {
+    if (isInputError(error)) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+
+    logApiError('ai_summary.review_failed', error);
+    res.status(500).json({ error: 'Failed to review AI summary' });
   }
 });
 
