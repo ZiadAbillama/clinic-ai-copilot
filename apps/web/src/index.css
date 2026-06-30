@@ -618,7 +618,8 @@ h3 {
 .appointmentPanel,
 .patientPanel,
 .detailCard,
-.formCard {
+.formCard,
+.toolPanel {
   background: var(--white);
   border: 1px solid var(--line);
   border-radius: 4px;
@@ -626,7 +627,8 @@ h3 {
 }
 
 .appointmentPanel,
-.patientPanel {
+.patientPanel,
+.toolPanel {
   overflow: hidden;
 }
 
@@ -684,9 +686,12 @@ h3 {
 .formHeader button,
 .patientRowActions button,
 .visitPanelHeader button,
+.toolPanelHeader button,
 .timelineHeader button,
 .recordActions button,
 .visitRow button,
+.noteSearchRow button,
+.toolSearchForm button,
 .formActions button,
 .primaryButton {
   display: inline-flex;
@@ -704,8 +709,11 @@ h3 {
 .panelActions button,
 .formHeader button,
 .visitPanelHeader button,
+.toolPanelHeader button,
 .recordActions button,
 .visitRow button,
+.noteSearchRow button,
+.toolSearchForm button,
 .formActions button {
   min-width: 0;
   padding: 0 14px;
@@ -716,11 +724,19 @@ h3 {
 .formHeader button:hover,
 .appointmentRow button:hover,
 .visitPanelHeader button:hover,
+.toolPanelHeader button:hover,
 .timelineHeader button:hover,
 .recordActions button:hover,
 .visitRow button:hover,
+.noteSearchRow button:hover,
+.toolSearchForm button:hover,
 .formActions button:hover {
   border-color: var(--cyan);
+}
+
+.appointmentSchedulePanel {
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--line);
 }
 
 .appointmentList {
@@ -1561,6 +1577,152 @@ h3 {
   color: var(--ink-soft);
 }
 
+.recordsTools {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+  gap: 24px;
+}
+
+.toolPanelHeader {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 24px;
+  border-bottom: 1px solid var(--line);
+}
+
+.toolSearchForm {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) auto auto;
+  gap: 10px;
+  align-items: end;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--line);
+}
+
+.toolSearchForm label {
+  display: grid;
+  gap: 6px;
+}
+
+.toolSearchForm label span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.toolSearchForm input {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
+  color: var(--ink);
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.toolSearchForm input:focus {
+  outline: 4px solid rgba(18, 184, 232, 0.22);
+  border-color: var(--cyan);
+}
+
+.toolSearchForm .primaryButton {
+  grid-column: auto;
+}
+
+.toolList {
+  display: grid;
+  overflow-x: auto;
+}
+
+.noteSearchHeader,
+.noteSearchRow {
+  display: grid;
+  grid-template-columns:
+    minmax(116px, 0.7fr) minmax(170px, 0.9fr) minmax(280px, 1.4fr)
+    minmax(150px, 0.8fr) minmax(132px, 0.6fr);
+  gap: 14px;
+  align-items: center;
+  min-width: 920px;
+}
+
+.auditHeader,
+.auditRow {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.9fr) minmax(170px, 1fr) minmax(150px, 0.9fr);
+  gap: 14px;
+  align-items: center;
+  min-width: 520px;
+}
+
+.noteSearchHeader,
+.auditHeader {
+  padding: 12px 24px;
+  color: #44474c;
+  background: #e7ecf6;
+  border-bottom: 1px solid var(--line);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.noteSearchRow,
+.auditRow {
+  padding: 13px 24px;
+  border-bottom: 1px solid var(--line);
+}
+
+.noteSearchRow time,
+.auditRow time {
+  color: var(--cyan);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.noteSearchRow strong,
+.auditRow strong {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.noteSearchRow small,
+.noteSearchRow span,
+.auditRow span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.noteSearchRow small {
+  display: block;
+  margin-top: 4px;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.noteSearchRow p {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.toolList .paginationBar {
+  min-width: 520px;
+  padding: 12px 24px;
+}
+
 .timelineActions button {
   min-height: 34px;
   padding: 0 10px;
@@ -1692,6 +1854,10 @@ h3 {
     grid-template-columns: 1fr;
   }
 
+  .recordsTools {
+    grid-template-columns: 1fr;
+  }
+
   .detailCard {
     position: static;
   }
@@ -1700,7 +1866,8 @@ h3 {
 @media (max-width: 1100px) {
   .appointmentList,
   .visitList,
-  .timelineList {
+  .timelineList,
+  .toolList {
     overflow-x: visible;
   }
 
@@ -1728,8 +1895,13 @@ h3 {
   .visitEmptyState,
   .timelineTableHeader,
   .timelineItem,
+  .noteSearchHeader,
+  .noteSearchRow,
+  .auditHeader,
+  .auditRow,
   .visitList .paginationBar,
-  .timelineList .paginationBar {
+  .timelineList .paginationBar,
+  .toolList .paginationBar {
     min-width: 0;
     width: 100%;
   }
@@ -1754,8 +1926,24 @@ h3 {
     gap: 10px;
   }
 
+  .noteSearchHeader,
+  .noteSearchRow {
+    grid-template-columns:
+      minmax(110px, 0.7fr) minmax(150px, 0.9fr) minmax(210px, 1.2fr)
+      minmax(130px, 0.75fr) minmax(124px, 0.65fr);
+    gap: 10px;
+  }
+
+  .auditHeader,
+  .auditRow {
+    grid-template-columns: minmax(140px, 0.8fr) minmax(150px, 1fr) minmax(130px, 0.8fr);
+    gap: 10px;
+  }
+
   .visitRow,
-  .timelineItem {
+  .timelineItem,
+  .noteSearchRow,
+  .auditRow {
     padding: 12px 14px;
   }
 
@@ -1776,7 +1964,8 @@ h3 {
   }
 
   .visitList .paginationBar,
-  .timelineList .paginationBar {
+  .timelineList .paginationBar,
+  .toolList .paginationBar {
     align-items: center;
     flex-direction: row;
   }
@@ -1963,7 +2152,8 @@ h3 {
   }
 
   .appointmentPageHeader,
-  .appointmentContextHeader {
+  .appointmentContextHeader,
+  .toolPanelHeader {
     align-items: flex-start;
     flex-direction: column;
   }
@@ -2006,6 +2196,14 @@ h3 {
     width: 100%;
     max-width: none;
     justify-content: flex-start;
+  }
+
+  .toolSearchForm {
+    grid-template-columns: 1fr;
+  }
+
+  .toolSearchForm .primaryButton {
+    grid-column: 1;
   }
 
   .patientSearch {

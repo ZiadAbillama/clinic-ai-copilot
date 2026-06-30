@@ -34,5 +34,6 @@ const auditLogSchema = new mongoose.Schema(
 
 auditLogSchema.index({ doctorId: 1, id: 1 }, { unique: true });
 auditLogSchema.index({ doctorId: 1, targetType: 1, targetId: 1, createdAt: -1 });
+auditLogSchema.index({ doctorId: 1, createdAt: -1, id: 1 });
 
 export const AuditLog = mongoose.models.AuditLog || mongoose.model('AuditLog', auditLogSchema);

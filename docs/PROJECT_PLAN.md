@@ -24,7 +24,7 @@ reviewed summary is saved with the original doctor note.
 | Database | MongoDB only, via Mongoose (no PostgreSQL)                           | Completed |
 | AI       | Local Ollama server, model `llama3.1:8b` at `http://localhost:11434` | Completed |
 | Auth     | Multiple doctors, isolated data, real JWT                            | Completed |
-| Search   | MongoDB text search (semantic later)                                 | Planned   |
+| Search   | MongoDB text search (semantic later)                                 | Completed |
 | Infra    | Docker Compose (later)                                               | Planned   |
 | Tooling  | Yarn workspaces, ESLint, Prettier                                    | Completed |
 
@@ -38,22 +38,23 @@ reviewed summary is saved with the original doctor note.
 
 | #   | Feature               | Summary                                                      | Status    |
 | --- | --------------------- | ------------------------------------------------------------ | --------- |
-| 1   | Doctor dashboard      | Today's appointments with patient/status/open appointment    | Partial   |
+| 1   | Doctor dashboard      | Today's appointments, scheduling, and open appointment       | Partial   |
 | 2   | Patient management    | List / open / create / edit / archive patients               | Completed |
 | 3   | Appointments (visits) | Patient visit history, scheduling, editing, archive behavior | Completed |
 | 4   | Medical notes         | Attached to a visit or standalone on a patient               | Completed |
 | 5   | Patient timeline      | Merged visits + notes, newest-first                          | Completed |
 | 6   | AI summarization      | Local Ollama drafts a note summary after doctor note exists  | Completed |
 | 7   | AI review             | Draft -> Approved / Rejected; only Approved counts           | Completed |
-| 8   | Note search           | MongoDB text search over notes                               | Planned   |
-| 9   | Audit log             | Record key doctor actions                                    | Partial   |
+| 8   | Note search           | MongoDB text search over notes                               | Completed |
+| 9   | Audit log             | Record and view key doctor actions                           | Completed |
 | 10  | Auth                  | Multiple doctors, isolated data, JWT                         | Completed |
 
 ### Feature detail notes
 
 - **Dashboard (Partial):** UI shell, live `/api/health` status, today's
-  appointment list, patient information, visit status, and an `Open appointment`
-  action exist. The list depends on appointments dated today.
+  appointment list, appointment scheduling, patient information, visit status,
+  and an `Open appointment` action exist. The list depends on appointments dated
+  today.
 - **Patient management (Completed):** list/get/create/edit/archive exists for each
   authenticated doctor, backed by MongoDB Atlas.
 - **Appointments (Completed):** appointment model, patient visit history,
@@ -64,9 +65,8 @@ reviewed summary is saved with the original doctor note.
   to a visit or saved as standalone patient notes.
 - **Patient timeline (Completed):** timeline API and UI merge visits + notes,
   newest-first.
-- **Audit log (Partial):** AuditLog model exists and patient, appointment, note,
-  and AI summary review actions are recorded. A full audit viewer is not built
-  yet.
+- **Audit log (Completed):** AuditLog model exists and patient, appointment,
+  note, and AI summary review actions are recorded and visible in the app.
 - **Auth (Completed):** doctors can register/login with JWT. Patient,
   appointment, note, timeline, and audit routes are scoped to the authenticated
   doctor. The seed script creates a demo doctor for existing starter data.
@@ -118,18 +118,19 @@ Current (JWT-protected unless noted):
 - `PATCH /api/appointments/:id` - update a visit
 - `DELETE /api/appointments/:id` - archive a visit
 - `GET /api/notes` - list notes, optionally filtered by patient or visit
+- `GET /api/notes/search?q=` - text search over active notes
 - `POST /api/notes` - create a standalone or visit-linked note
 - `PATCH /api/notes/:id` - update a note
 - `DELETE /api/notes/:id` - archive a note
 - `GET /api/notes/:id/summary` - latest non-rejected AI summary for a note
 - `POST /api/notes/:id/summarize` - generate an Ollama draft summary
 - `PATCH /api/summaries/:id` - approve/reject an AI summary
+- `GET /api/audit-logs` - paginated recent audit events
 - `GET /api/patients/:id/timeline` - merged visits + notes for one patient
 
 Planned:
 
-- `GET /api/notes/search?q=` - text search over notes
-- Audit log viewer
+- Semantic search over notes
 
 ## 7. Build Roadmap
 
@@ -144,7 +145,7 @@ Planned:
 | 6     | Patients + visits + notes CRUD              | Completed |
 | 7     | Patient timeline                            | Completed |
 | 8     | AI summarization (Ollama) + review workflow | Completed |
-| 9     | Note search + audit log                     | Planned   |
+| 9     | Note search + audit log                     | Completed |
 | 10    | Dockerize + deployment                      | Planned   |
 
 ## 8. Known Limitations (current)
@@ -154,7 +155,8 @@ Planned:
 - The demo doctor account is created by `yarn api:seed`; new doctor accounts start
   with empty patient data by design.
 - Appointment persistence, patient visit history, scheduling/editing, and archive
-  behavior exist.
+  behavior exist. Scheduling is available from the appointments panel and patient
+  visit history.
 - Ollama must be running locally and the configured model must be installed for
   AI draft generation to work.
-- Note search and the full audit viewer are not built yet.
+- Semantic search is not built yet.

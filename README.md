@@ -1,10 +1,10 @@
 # Clinic AI Copilot
 
-Clinic AI Copilot is a doctor-facing clinic workspace built as a staged training project. The current app focuses on secure provider access, patient records, visits, notes, patient timelines, and doctor-reviewed AI summaries backed by MongoDB Atlas.
+Clinic AI Copilot is a doctor-facing clinic workspace built as a staged training project. The current app focuses on secure provider access, appointment scheduling, patient records, visits, notes, patient timelines, note search, audit history, and doctor-reviewed AI summaries backed by MongoDB Atlas.
 
 ## Current Stage
 
-Current stage: Stage 8 complete - appointment note workflow with Ollama AI draft review.
+Current stage: Stage 9 complete - note search and audit history.
 
 Implemented:
 
@@ -13,13 +13,16 @@ Implemented:
 - Express API with JWT-protected clinical endpoints
 - MongoDB Atlas storage through Mongoose
 - Patient management with soft archive delete behavior
+- Appointment scheduling from today's appointment panel and patient visit history
 - Visits, notes, and patient timeline views with archive behavior
 - Appointment workspace with doctor note entry and AI draft summary review
+- MongoDB text search over active notes
+- Recent audit log viewer
 - Pagination for patients, visits, notes, and timeline endpoints
 
 Not yet implemented:
 
-- Note search and semantic search
+- Semantic search
 - Production deployment pipeline
 - Full role-based access control beyond the doctor role
 

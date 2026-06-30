@@ -45,6 +45,7 @@ const appointmentFieldMaxLengths = {
   reason: 160,
   status: 32,
 };
+const noteSearchMaxLength = 120;
 const aiSummaryStatuses = new Set(['approved', 'rejected']);
 const aiSummaryFieldMaxLengths = {
   shortSummary: 1200,
@@ -483,6 +484,38 @@ async function buildAppointmentResponses(appointments, doctorId) {
   }));
 }
 
+async function buildNoteSearchResponses(notes, doctorId) {
+  const patientIds = [...new Set(notes.map((note) => note.patientId).filter(Boolean))];
+  const appointmentIds = [...new Set(notes.map((note) => note.appointmentId).filter(Boolean))];
+
+  const [patients, appointments] = await Promise.all([
+    Patient.find({
+      doctorId,
+      id: { $in: patientIds },
+      archivedAt: null,
+    })
+      .select(patientPublicFields)
+      .lean(),
+    Appointment.find({
+      doctorId,
+      id: { $in: appointmentIds },
+      archivedAt: null,
+    })
+      .select(appointmentPublicFields)
+      .lean(),
+  ]);
+  const patientsById = new Map(patients.map((patient) => [patient.id, patient]));
+  const appointmentsById = new Map(
+    appointments.map((appointment) => [appointment.id, appointment]),
+  );
+
+  return notes.map((note) => ({
+    ...note,
+    patient: patientsById.get(note.patientId) || null,
+    appointment: note.appointmentId ? appointmentsById.get(note.appointmentId) || null : null,
+  }));
+}
+
 async function refreshPatientNoteCount(doctorId, patientId) {
   const noteCount = await Note.countDocuments({
     doctorId,
@@ -890,6 +923,59 @@ app.get('/api/notes', async (req, res) => {
   }
 });
 
+app.get('/api/notes/search', async (req, res) => {
+  try {
+    const pagination = getPagination(req.query);
+    const search = String(req.query.q ?? '').trim();
+
+    if (!search) {
+      setPaginationHeaders(res, {
+        ...pagination,
+        hasNextPage: false,
+      });
+      res.json([]);
+      return;
+    }
+
+    if (search.length > noteSearchMaxLength) {
+      res.status(400).json({ error: `Search must be ${noteSearchMaxLength} characters or fewer.` });
+      return;
+    }
+
+    const notes = await Note.find(
+      {
+        doctorId: req.doctor.id,
+        archivedAt: null,
+        $text: { $search: search },
+      },
+      {
+        _id: 0,
+        __v: 0,
+        doctorId: 0,
+        archivedAt: 0,
+        score: { $meta: 'textScore' },
+      },
+    )
+      .sort({ score: { $meta: 'textScore' }, createdAt: -1, id: 1 })
+      .skip(pagination.skip)
+      .limit(pagination.limit + 1)
+      .lean();
+
+    const response = await buildNoteSearchResponses(
+      notes.slice(0, pagination.limit),
+      req.doctor.id,
+    );
+    setPaginationHeaders(res, {
+      ...pagination,
+      hasNextPage: notes.length > pagination.limit,
+    });
+    res.json(response.filter((note) => note.patient));
+  } catch (error) {
+    logApiError('notes.search_failed', error);
+    res.status(500).json({ error: 'Failed to search notes' });
+  }
+});
+
 app.post('/api/notes', async (req, res) => {
   try {
     const payload = cleanNoteInput(req.body);
@@ -1208,6 +1294,27 @@ app.patch('/api/summaries/:id', async (req, res) => {
 
     logApiError('ai_summary.review_failed', error);
     res.status(500).json({ error: 'Failed to review AI summary' });
+  }
+});
+
+app.get('/api/audit-logs', async (req, res) => {
+  try {
+    const pagination = getPagination(req.query);
+    const auditLogs = await AuditLog.find({ doctorId: req.doctor.id })
+      .select('-_id -__v -doctorId')
+      .sort({ createdAt: -1, id: 1 })
+      .skip(pagination.skip)
+      .limit(pagination.limit + 1)
+      .lean();
+
+    setPaginationHeaders(res, {
+      ...pagination,
+      hasNextPage: auditLogs.length > pagination.limit,
+    });
+    res.json(auditLogs.slice(0, pagination.limit));
+  } catch (error) {
+    logApiError('audit_log.list_failed', error);
+    res.status(500).json({ error: 'Failed to load audit log' });
   }
 });
 

@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
+  CalendarPlus,
   CheckCircle2,
   FileText,
   HeartPulse,
   Pencil,
   Plus,
+  Search,
   Trash2,
   X,
 } from 'lucide-react';
@@ -21,6 +23,8 @@ const apiBaseUrl = configuredApiBaseUrl || 'http://localhost:3001';
 const patientPageLimit = 10;
 const appointmentPageLimit = 8;
 const detailPageLimit = 5;
+const noteSearchPageLimit = 6;
+const auditLogPageLimit = 8;
 const visitStatuses = Object.freeze([
   'Scheduled',
   'Checked in',
@@ -65,6 +69,29 @@ function formatDobWithAge(dob) {
 function formatAge(dob) {
   const age = calculateAge(dob);
   return age === null ? 'Not set' : `${age}y`;
+}
+
+function formatDateTime(value) {
+  if (!value) return 'Not set';
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value).slice(0, 16);
+
+  return date.toLocaleString(undefined, {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function formatAuditAction(action) {
+  return String(action || '')
+    .split('.')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).replaceAll('_', ' '))
+    .join(' ');
 }
 
 const emptyPatientForm = {
@@ -201,6 +228,8 @@ export default function App() {
   const [patientPendingDelete, setPatientPendingDelete] = useState(null);
   const [deleteStatus, setDeleteStatus] = useState('Idle');
   const [appointmentFormMode, setAppointmentFormMode] = useState('closed');
+  const [appointmentFormContext, setAppointmentFormContext] = useState('patient');
+  const [appointmentPatientId, setAppointmentPatientId] = useState('');
   const [appointmentForm, setAppointmentForm] = useState(createEmptyAppointmentForm);
   const [appointmentFormStatus, setAppointmentFormStatus] = useState('Idle');
   const [appointmentFormError, setAppointmentFormError] = useState('');
@@ -230,6 +259,22 @@ export default function App() {
   const [noteFormError, setNoteFormError] = useState('');
   const [editingNoteId, setEditingNoteId] = useState('');
   const [patientSearch, setPatientSearch] = useState('');
+  const [noteSearchQuery, setNoteSearchQuery] = useState('');
+  const [noteSearchTerm, setNoteSearchTerm] = useState('');
+  const [noteSearchResults, setNoteSearchResults] = useState([]);
+  const [noteSearchState, setNoteSearchState] = useState('Idle');
+  const [noteSearchError, setNoteSearchError] = useState('');
+  const [noteSearchPage, setNoteSearchPage] = useState(1);
+  const [noteSearchPagination, setNoteSearchPagination] = useState(
+    createPagination(noteSearchPageLimit),
+  );
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [auditLogsState, setAuditLogsState] = useState('Idle');
+  const [auditLogsError, setAuditLogsError] = useState('');
+  const [auditLogsPage, setAuditLogsPage] = useState(1);
+  const [auditLogsPagination, setAuditLogsPagination] = useState(
+    createPagination(auditLogPageLimit),
+  );
   const deleteDialogRef = useRef(null);
 
   const clearSession = useCallback(() => {
@@ -240,6 +285,8 @@ export default function App() {
     setTodayAppointments([]);
     setAppointments([]);
     setTimeline([]);
+    setNoteSearchResults([]);
+    setAuditLogs([]);
     setActiveAppointment(null);
     setAppointmentNote(null);
     setAppointmentNoteText('');
@@ -255,6 +302,8 @@ export default function App() {
     setTodayAppointmentsPage(1);
     setAppointmentsPage(1);
     setTimelinePage(1);
+    setNoteSearchPage(1);
+    setAuditLogsPage(1);
   }, []);
 
   const apiFetch = useCallback(
@@ -508,22 +557,36 @@ export default function App() {
     setFormStatus('Idle');
   }
 
-  function startAppointmentForm(mode, appointmentId = '') {
-    if (!selectedPatient) return;
+  function startAppointmentForm(mode, appointmentId = '', context = 'patient') {
+    if (context === 'patient' && !selectedPatient) return;
     const existingAppointment = appointmentId ? findAppointment(appointmentId) : null;
     setAppointmentFormMode(mode);
+    setAppointmentFormContext(context);
+    setAppointmentPatientId(existingAppointment?.patientId || selectedPatientId || '');
     setAppointmentFormFromVisit(existingAppointment);
     setEditingAppointmentId(appointmentId);
     setAppointmentFormError('');
     setAppointmentFormStatus('Idle');
-    setVisitsOpen(true);
+    if (context === 'patient') {
+      setVisitsOpen(true);
+    }
+    setTimelineOpen(false);
   }
 
   function closeAppointmentForm() {
     setAppointmentFormMode('closed');
+    setAppointmentFormContext('patient');
+    setAppointmentPatientId('');
     setAppointmentFormError('');
     setAppointmentFormStatus('Idle');
     setEditingAppointmentId('');
+  }
+
+  function startDashboardAppointmentForm() {
+    startAppointmentForm('create', '', 'dashboard');
+    window.setTimeout(() => {
+      document.getElementById('appointment-schedule-form')?.scrollIntoView({ block: 'center' });
+    }, 0);
   }
 
   function closeNoteForm() {
@@ -535,6 +598,7 @@ export default function App() {
 
   function selectPatient(patientId) {
     setSelectedPatientId(patientId);
+    setAppointmentPatientId(patientId);
     setAppointmentsPage(1);
     setVisitArchiveMode('active');
     setTimelinePage(1);
@@ -582,8 +646,52 @@ export default function App() {
     setTimelinePage((currentPage) => currentPage + 1);
   }
 
+  function handleNoteSearchSubmit(event) {
+    event.preventDefault();
+    const search = noteSearchQuery.trim();
+
+    setNoteSearchTerm(search);
+    setNoteSearchPage(1);
+    loadNoteSearch(search, 1);
+  }
+
+  function clearNoteSearch() {
+    setNoteSearchQuery('');
+    setNoteSearchTerm('');
+    setNoteSearchPage(1);
+    setNoteSearchResults([]);
+    setNoteSearchPagination(createPagination(noteSearchPageLimit));
+    setNoteSearchState('Idle');
+    setNoteSearchError('');
+  }
+
+  function previousNoteSearchPage() {
+    const page = Math.max(noteSearchPage - 1, 1);
+    setNoteSearchPage(page);
+    loadNoteSearch(noteSearchTerm, page);
+  }
+
+  function nextNoteSearchPage() {
+    const page = noteSearchPage + 1;
+    setNoteSearchPage(page);
+    loadNoteSearch(noteSearchTerm, page);
+  }
+
+  function previousAuditLogsPage() {
+    setAuditLogsPage((currentPage) => Math.max(currentPage - 1, 1));
+  }
+
+  function nextAuditLogsPage() {
+    setAuditLogsPage((currentPage) => currentPage + 1);
+  }
+
   function handleAppointmentFormChange(event) {
     const { name, value } = event.target;
+    if (name === 'appointmentPatientId') {
+      setAppointmentPatientId(value);
+      return;
+    }
+
     setAppointmentForm((currentForm) => ({
       ...currentForm,
       [name]: value,
@@ -736,6 +844,98 @@ export default function App() {
     [apiFetch, applyAiSummary, authToken, resetAiSummaryState],
   );
 
+  const loadNoteSearch = useCallback(
+    (term, page = 1) => {
+      const search = term.trim();
+
+      if (!authToken || !search) {
+        setNoteSearchResults([]);
+        setNoteSearchPagination(createPagination(noteSearchPageLimit));
+        setNoteSearchState('Idle');
+        setNoteSearchError('');
+        return Promise.resolve([]);
+      }
+
+      setNoteSearchState('Loading');
+      setNoteSearchError('');
+
+      return apiFetch(
+        `/api/notes/search?${buildQuery({
+          q: search,
+          page,
+          limit: noteSearchPageLimit,
+        })}`,
+      )
+        .then(async (res) => {
+          if (!res.ok) throw res;
+
+          return {
+            data: await res.json(),
+            pagination: paginationFromResponse(res, page, noteSearchPageLimit),
+          };
+        })
+        .then(({ data, pagination }) => {
+          setNoteSearchResults(data);
+          setNoteSearchPagination(pagination);
+          setNoteSearchState('Loaded');
+          setNoteSearchError('');
+          return data;
+        })
+        .catch(() => {
+          setNoteSearchResults([]);
+          setNoteSearchPagination(createPagination(noteSearchPageLimit));
+          setNoteSearchState('Offline');
+          setNoteSearchError('Note search is unavailable. Check the API and try again.');
+          return [];
+        });
+    },
+    [apiFetch, authToken],
+  );
+
+  const loadAuditLogs = useCallback(
+    (page = auditLogsPage) => {
+      if (!authToken) {
+        setAuditLogs([]);
+        setAuditLogsPagination(createPagination(auditLogPageLimit));
+        setAuditLogsState('Idle');
+        return Promise.resolve([]);
+      }
+
+      setAuditLogsState('Loading');
+      setAuditLogsError('');
+
+      return apiFetch(
+        `/api/audit-logs?${buildQuery({
+          page,
+          limit: auditLogPageLimit,
+        })}`,
+      )
+        .then(async (res) => {
+          if (!res.ok) throw res;
+
+          return {
+            data: await res.json(),
+            pagination: paginationFromResponse(res, page, auditLogPageLimit),
+          };
+        })
+        .then(({ data, pagination }) => {
+          setAuditLogs(data);
+          setAuditLogsPagination(pagination);
+          setAuditLogsState('Loaded');
+          setAuditLogsError('');
+          return data;
+        })
+        .catch(() => {
+          setAuditLogs([]);
+          setAuditLogsPagination(createPagination(auditLogPageLimit));
+          setAuditLogsState('Offline');
+          setAuditLogsError('Audit log is unavailable. Check the API and try again.');
+          return [];
+        });
+    },
+    [apiFetch, auditLogsPage, authToken],
+  );
+
   function toggleTimeline() {
     if (timelineOpen) {
       setTimelineOpen(false);
@@ -854,7 +1054,12 @@ export default function App() {
 
   function handleAppointmentSubmit(event) {
     event.preventDefault();
-    if (!selectedPatientId) return;
+    const patientId = appointmentPatientId || selectedPatientId;
+
+    if (!patientId) {
+      setAppointmentFormError('Choose a patient before saving the appointment.');
+      return;
+    }
 
     const existingAppointment = editingAppointmentId ? findAppointment(editingAppointmentId) : null;
     const isEditing = appointmentFormMode === 'edit' && existingAppointment;
@@ -869,14 +1074,18 @@ export default function App() {
       method: isEditing ? 'PATCH' : 'POST',
       body: JSON.stringify({
         ...appointmentForm,
-        patientId: selectedPatientId,
+        patientId,
       }),
     })
       .then((res) => (res.ok ? res.json() : Promise.reject(res)))
       .then((appointment) => {
         const nextPage = isEditing ? appointmentsPage : 1;
+        setSelectedPatientId(appointment.patientId);
+        setSelectedPatient(appointment.patient || null);
+        setAppointmentPatientId(appointment.patientId);
         setAppointmentFormStatus('Saved');
         setAppointmentFormMode('closed');
+        setAppointmentFormContext('patient');
         setEditingAppointmentId('');
         if (!isEditing) setAppointmentsPage(1);
         setVisitsOpen(true);
@@ -887,8 +1096,9 @@ export default function App() {
           text: `${appointment.patient.name} is set for ${appointment.scheduledTime || appointment.scheduledDate}.`,
         });
         return Promise.all([
-          loadAppointments(selectedPatientId, nextPage),
-          refreshWorkspace(selectedPatientId),
+          loadAppointments(appointment.patientId, nextPage),
+          loadTodayAppointments(1),
+          refreshWorkspace(appointment.patientId),
         ]);
       })
       .catch(() => {
@@ -1226,6 +1436,10 @@ export default function App() {
   }, [loadTodayAppointments]);
 
   useEffect(() => {
+    loadAuditLogs();
+  }, [loadAuditLogs]);
+
+  useEffect(() => {
     loadAppointments();
   }, [loadAppointments]);
 
@@ -1374,6 +1588,7 @@ export default function App() {
     (appointment) => appointment.patientId === selectedPatientId,
   );
   const appointmentFormOpen = appointmentFormMode !== 'closed';
+  const patientAppointmentFormOpen = appointmentFormOpen && appointmentFormContext === 'patient';
   const filteredPatients = patients.filter((patient) => {
     const search = patientSearch.trim().toLowerCase();
     if (!search) return true;
@@ -1383,6 +1598,85 @@ export default function App() {
       .toLowerCase()
       .includes(search);
   });
+
+  function renderAppointmentForm({ includePatientSelect = false } = {}) {
+    return (
+      <form className="visitForm" onSubmit={handleAppointmentSubmit}>
+        {includePatientSelect && (
+          <label className="wideField">
+            Patient
+            <select
+              name="appointmentPatientId"
+              value={appointmentPatientId}
+              onChange={handleAppointmentFormChange}
+              required
+            >
+              <option value="">Choose patient</option>
+              {patients.map((patient) => (
+                <option key={patient.id} value={patient.id}>
+                  {patient.name} - {patient.id}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <label>
+          Date
+          <input
+            name="scheduledDate"
+            type="date"
+            value={appointmentForm.scheduledDate}
+            onChange={handleAppointmentFormChange}
+          />
+        </label>
+        <label>
+          Time
+          <input
+            name="scheduledTime"
+            type="time"
+            value={appointmentForm.scheduledTime}
+            onChange={handleAppointmentFormChange}
+          />
+        </label>
+        <label>
+          Status
+          <select
+            name="status"
+            value={appointmentForm.status}
+            onChange={handleAppointmentFormChange}
+          >
+            {visitStatuses.map((status) => (
+              <option key={status}>{status}</option>
+            ))}
+          </select>
+        </label>
+        <label className="wideField">
+          Reason
+          <input
+            name="reason"
+            value={appointmentForm.reason}
+            onChange={handleAppointmentFormChange}
+            placeholder="Visit reason"
+          />
+        </label>
+
+        {appointmentFormError && <p className="formMessage error">{appointmentFormError}</p>}
+
+        <div className="formActions">
+          <button type="button" onClick={closeAppointmentForm}>
+            Cancel
+          </button>
+          <button
+            className="primaryButton"
+            disabled={appointmentFormStatus === 'Saving'}
+            type="submit"
+          >
+            {appointmentFormStatus === 'Saving' ? 'Saving...' : 'Save appointment'}
+          </button>
+        </div>
+      </form>
+    );
+  }
 
   if (!authToken) {
     return (
@@ -1879,8 +2173,37 @@ export default function App() {
                   <p className="eyebrow">Appointments</p>
                   <h2>Today</h2>
                 </div>
-                <span>{getTodayDateString()}</span>
+                <div className="panelActions">
+                  <span>{getTodayDateString()}</span>
+                  <button
+                    type="button"
+                    onClick={
+                      appointmentFormOpen && appointmentFormContext === 'dashboard'
+                        ? closeAppointmentForm
+                        : startDashboardAppointmentForm
+                    }
+                  >
+                    {appointmentFormOpen && appointmentFormContext === 'dashboard' ? (
+                      <X size={16} />
+                    ) : (
+                      <CalendarPlus size={16} />
+                    )}
+                    {appointmentFormOpen && appointmentFormContext === 'dashboard'
+                      ? 'Close'
+                      : 'Schedule appointment'}
+                  </button>
+                </div>
               </div>
+
+              {appointmentFormOpen && appointmentFormContext === 'dashboard' && (
+                <section
+                  className="appointmentSchedulePanel"
+                  id="appointment-schedule-form"
+                  aria-label="Schedule appointment"
+                >
+                  {renderAppointmentForm({ includePatientSelect: true })}
+                </section>
+              )}
 
               <div className="appointmentList">
                 <div className="appointmentTableHeader" aria-hidden="true">
@@ -2130,14 +2453,14 @@ export default function App() {
                               <p className="eyebrow">Visits</p>
                               <h3 id="visit-panel-title">Patient visits</h3>
                             </div>
-                            {!appointmentFormOpen && (
+                            {!patientAppointmentFormOpen && (
                               <button type="button" onClick={() => startAppointmentForm('create')}>
                                 Schedule visit
                               </button>
                             )}
                           </div>
 
-                          {!appointmentFormOpen && (
+                          {!patientAppointmentFormOpen && (
                             <div className="visitList">
                               <div className="visitToolbar" aria-label="Visit list mode">
                                 <button
@@ -2228,66 +2551,7 @@ export default function App() {
                             </div>
                           )}
 
-                          {appointmentFormOpen && (
-                            <form className="visitForm" onSubmit={handleAppointmentSubmit}>
-                              <label>
-                                Date
-                                <input
-                                  name="scheduledDate"
-                                  type="date"
-                                  value={appointmentForm.scheduledDate}
-                                  onChange={handleAppointmentFormChange}
-                                />
-                              </label>
-                              <label>
-                                Time
-                                <input
-                                  name="scheduledTime"
-                                  type="time"
-                                  value={appointmentForm.scheduledTime}
-                                  onChange={handleAppointmentFormChange}
-                                />
-                              </label>
-                              <label>
-                                Status
-                                <select
-                                  name="status"
-                                  value={appointmentForm.status}
-                                  onChange={handleAppointmentFormChange}
-                                >
-                                  {visitStatuses.map((status) => (
-                                    <option key={status}>{status}</option>
-                                  ))}
-                                </select>
-                              </label>
-                              <label className="wideField">
-                                Reason
-                                <input
-                                  name="reason"
-                                  value={appointmentForm.reason}
-                                  onChange={handleAppointmentFormChange}
-                                  placeholder="Visit reason"
-                                />
-                              </label>
-
-                              {appointmentFormError && (
-                                <p className="formMessage error">{appointmentFormError}</p>
-                              )}
-
-                              <div className="formActions">
-                                <button type="button" onClick={closeAppointmentForm}>
-                                  Cancel
-                                </button>
-                                <button
-                                  className="primaryButton"
-                                  disabled={appointmentFormStatus === 'Saving'}
-                                  type="submit"
-                                >
-                                  {appointmentFormStatus === 'Saving' ? 'Saving...' : 'Save visit'}
-                                </button>
-                              </div>
-                            </form>
-                          )}
+                          {patientAppointmentFormOpen && renderAppointmentForm()}
                         </section>
                       )}
 
@@ -2415,6 +2679,132 @@ export default function App() {
 
               {formMode === 'create' && patientFormSection}
             </aside>
+
+            <section className="recordsTools" aria-label="Records tools">
+              <section className="toolPanel" aria-labelledby="note-search-title">
+                <div className="toolPanelHeader">
+                  <div>
+                    <p className="eyebrow">Notes</p>
+                    <h2 id="note-search-title">Search notes</h2>
+                  </div>
+                </div>
+
+                <form className="toolSearchForm" onSubmit={handleNoteSearchSubmit}>
+                  <label>
+                    <span>Search notes</span>
+                    <input
+                      value={noteSearchQuery}
+                      onChange={(event) => setNoteSearchQuery(event.target.value)}
+                      placeholder="Search clinical notes..."
+                      type="search"
+                    />
+                  </label>
+                  <button className="primaryButton" type="submit">
+                    <Search size={16} />
+                    Search
+                  </button>
+                  {(noteSearchQuery || noteSearchTerm) && (
+                    <button type="button" onClick={clearNoteSearch}>
+                      <X size={16} />
+                      Clear
+                    </button>
+                  )}
+                </form>
+
+                {noteSearchState === 'Loading' && (
+                  <p className="patientMessage">Searching notes...</p>
+                )}
+                {noteSearchError && <p className="patientMessage error">{noteSearchError}</p>}
+                {noteSearchState === 'Loaded' &&
+                  noteSearchTerm &&
+                  noteSearchResults.length === 0 && (
+                    <p className="patientMessage">No notes found.</p>
+                  )}
+
+                {noteSearchResults.length > 0 && (
+                  <div className="toolList noteSearchList">
+                    <div className="noteSearchHeader" aria-hidden="true">
+                      <span>Date</span>
+                      <span>Patient</span>
+                      <span>Note</span>
+                      <span>Visit</span>
+                      <span>Action</span>
+                    </div>
+                    {noteSearchResults.map((note) => (
+                      <article className="noteSearchRow" key={note.id}>
+                        <time dateTime={note.createdAt}>{note.createdAt?.slice(0, 10)}</time>
+                        <div>
+                          <strong>{note.patient?.name || 'Unknown patient'}</strong>
+                          <small>ID: {note.patientId}</small>
+                        </div>
+                        <p>{note.text}</p>
+                        <span>
+                          {note.appointment
+                            ? `${note.appointment.scheduledDate} ${note.appointment.scheduledTime || ''}`
+                            : 'Standalone'}
+                        </span>
+                        <button type="button" onClick={() => selectPatient(note.patientId)}>
+                          View patient
+                        </button>
+                      </article>
+                    ))}
+                    <PaginationControls
+                      disabled={noteSearchState === 'Loading'}
+                      label="Search"
+                      pagination={noteSearchPagination}
+                      onPrevious={previousNoteSearchPage}
+                      onNext={nextNoteSearchPage}
+                    />
+                  </div>
+                )}
+              </section>
+
+              <section className="toolPanel" aria-labelledby="audit-log-title">
+                <div className="toolPanelHeader">
+                  <div>
+                    <p className="eyebrow">Audit</p>
+                    <h2 id="audit-log-title">Recent activity</h2>
+                  </div>
+                  <button type="button" onClick={() => loadAuditLogs(auditLogsPage)}>
+                    Refresh
+                  </button>
+                </div>
+
+                {auditLogsState === 'Loading' && (
+                  <p className="patientMessage">Loading activity...</p>
+                )}
+                {auditLogsError && <p className="patientMessage error">{auditLogsError}</p>}
+                {auditLogsState === 'Loaded' && auditLogs.length === 0 && (
+                  <p className="patientMessage">No activity recorded yet.</p>
+                )}
+
+                {auditLogs.length > 0 && (
+                  <div className="toolList auditList">
+                    <div className="auditHeader" aria-hidden="true">
+                      <span>Time</span>
+                      <span>Action</span>
+                      <span>Target</span>
+                    </div>
+                    {auditLogs.map((log) => (
+                      <article className="auditRow" key={log.id}>
+                        <time dateTime={log.createdAt}>{formatDateTime(log.createdAt)}</time>
+                        <strong>{formatAuditAction(log.action)}</strong>
+                        <span>
+                          {log.targetType} {log.targetId}
+                        </span>
+                      </article>
+                    ))}
+                    <PaginationControls
+                      disabled={auditLogsState === 'Loading'}
+                      label="Audit"
+                      pagination={auditLogsPagination}
+                      onPrevious={previousAuditLogsPage}
+                      onNext={nextAuditLogsPage}
+                    />
+                  </div>
+                )}
+              </section>
+            </section>
           </>
         )}
       </section>
