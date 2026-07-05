@@ -12,6 +12,9 @@ single host yet, but the deployment shape should stay the same:
   development data.
 - Use a strong `JWT_SECRET`; never reuse the local development value.
 
+Render staging is documented in `infra/deployment/render.md`, and the root
+`render.yaml` file defines the staging API/web services.
+
 ## Required Production Variables
 
 ```env

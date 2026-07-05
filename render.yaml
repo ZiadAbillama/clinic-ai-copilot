@@ -1,0 +1,60 @@
+services:
+  - type: web
+    runtime: docker
+    name: clinic-ai-copilot-api-staging
+    branch: main
+    region: frankfurt
+    plan: free
+    dockerfilePath: ./infra/docker/api.Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+      - key: API_PORT
+        value: 3001
+      - key: APP_NAME
+        value: clinic-ai-copilot
+      - key: APP_ROLE
+        value: doctor
+      - key: MONGO_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: CORS_ORIGINS
+        value: https://clinic-ai-copilot-web-staging.onrender.com
+      - key: DEMO_DOCTOR_ID
+        value: demo-doctor
+      - key: DEMO_DOCTOR_EMAIL
+        value: doctor@clinikit.local
+      - key: DEMO_DOCTOR_NAME
+        value: Demo Doctor
+      - key: DEMO_DOCTOR_PASSWORD
+        sync: false
+      - key: OLLAMA_URL
+        sync: false
+      - key: OLLAMA_MODEL
+        value: llama3.1:8b
+      - key: OLLAMA_TIMEOUT_MS
+        value: 45000
+
+  - type: web
+    runtime: docker
+    name: clinic-ai-copilot-web-staging
+    branch: main
+    region: frankfurt
+    plan: free
+    dockerfilePath: ./infra/docker/web.Dockerfile
+    dockerContext: .
+    healthCheckPath: /healthz
+    autoDeployTrigger: commit
+    envVars:
+      - key: PORT
+        value: 80
+      - key: VITE_API_BASE_URL
+        value: https://clinic-ai-copilot-api-staging.onrender.com

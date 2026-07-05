@@ -25,7 +25,7 @@ reviewed summary is saved with the original doctor note.
 | AI       | Local Ollama server, model `llama3.1:8b` at `http://localhost:11434` | Completed |
 | Auth     | Multiple doctors, isolated data, real JWT                            | Completed |
 | Search   | MongoDB text search (semantic later)                                 | Completed |
-| Infra    | Docker Compose and container build files                             | Partial   |
+| Infra    | Docker Compose and Render staging Blueprint                          | Partial   |
 | Tooling  | Yarn workspaces, ESLint, Prettier                                    | Completed |
 
 ## 3. Roles & Data Isolation
@@ -153,7 +153,7 @@ Planned:
 | 7     | Patient timeline                            | Completed |
 | 8     | AI summarization (Ollama) + review workflow | Completed |
 | 9     | Note search + audit log                     | Completed |
-| 10    | Dockerize + deployment                      | Partial   |
+| 10    | Dockerize + Render staging                  | Partial   |
 
 ## 8. Known Limitations (current)
 
@@ -172,3 +172,5 @@ Planned:
   httpOnly cookie sessions yet.
 - Docker Compose is available for local container runs. A production hosting
   target and CI/CD pipeline are still pending.
+- Render staging is prepared with `render.yaml`, but the live staging services
+  still need to be created in the Render Dashboard.

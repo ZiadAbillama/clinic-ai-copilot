@@ -21,7 +21,7 @@ import { Patient } from './models/Patient.js';
 import { visitStatus, visitStatuses } from './statuses.js';
 
 const app = express();
-const port = process.env.API_PORT || 3001;
+const port = process.env.PORT || process.env.API_PORT || 3001;
 const patientPublicFields = '-_id -__v -doctorId -createdAt -updatedAt -archivedAt';
 const appointmentPublicFields = '-_id -__v -doctorId -createdAt -updatedAt -archivedAt';
 const notePublicFields = '-_id -__v -doctorId -archivedAt';
@@ -1684,7 +1684,7 @@ app.delete('/api/patients/:id', async (req, res) => {
 
 connectDatabase()
   .then(() => {
-    app.listen(port, () => {
+    app.listen(port, '0.0.0.0', () => {
       console.info({
         event: 'api.started',
         service: 'clinic-ai-copilot-api',

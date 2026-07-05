@@ -4,7 +4,7 @@ Clinic AI Copilot is a doctor-facing clinic workspace built as a staged training
 
 ## Current Stage
 
-Current stage: Stage 10 in progress - Docker Compose and container build files are available. A production hosting target and CI/CD pipeline are still pending.
+Current stage: Stage 10 in progress - Docker Compose and Render staging files are available. Production hardening and CI/CD are still pending.
 
 Implemented:
 
@@ -22,11 +22,12 @@ Implemented:
 - Recent audit log viewer
 - Pagination for patients, appointments, visits, notes, timeline, note search, and audit log
 - Docker Compose setup for local API/web containers
+- Render Blueprint for a staging API/web deployment
 
 Not yet implemented:
 
 - Semantic search
-- Production deployment pipeline
+- Production deployment pipeline beyond Render staging
 - Full role-based access control beyond the doctor role
 - Forgot/reset password flow
 - Production auth hardening such as rate limiting and httpOnly cookie sessions
@@ -183,3 +184,4 @@ yarn docker:down
 - AI summaries are drafts until a doctor accepts or rejects them. Editing the original note invalidates prior summaries.
 - Ollama must be running locally for AI summary generation.
 - See `infra/docker/README.md` for container usage and `infra/deployment/README.md` for deployment notes.
+- See `infra/deployment/render.md` for Render staging steps.
