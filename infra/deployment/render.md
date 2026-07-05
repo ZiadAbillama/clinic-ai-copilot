@@ -9,6 +9,15 @@ The root `render.yaml` file is a Render Blueprint. Render reads it from the
 repository root and builds each service from the Dockerfile path listed in the
 file.
 
+## Live Staging URLs
+
+```text
+https://clinic-ai-copilot-web-staging.onrender.com
+https://clinic-ai-copilot-api-staging.onrender.com
+```
+
+The deployed web bundle points to the deployed staging API URL.
+
 ## Before Creating The Blueprint
 
 Create or choose a MongoDB Atlas database for staging. Do not point staging at

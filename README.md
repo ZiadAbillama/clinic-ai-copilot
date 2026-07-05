@@ -4,7 +4,7 @@ Clinic AI Copilot is a doctor-facing clinic workspace built as a staged training
 
 ## Current Stage
 
-Current stage: Stage 10 in progress - Docker Compose and Render staging files are available. Production hardening and CI/CD are still pending.
+Current stage: Stage 10 complete for staging - Docker Compose is validated locally and Render staging is live. Production hardening and CI/CD are still pending.
 
 Implemented:
 
@@ -22,7 +22,7 @@ Implemented:
 - Recent audit log viewer
 - Pagination for patients, appointments, visits, notes, timeline, note search, and audit log
 - Docker Compose setup for local API/web containers
-- Render Blueprint for a staging API/web deployment
+- Render staging API/web deployment
 
 Not yet implemented:
 
@@ -160,6 +160,18 @@ alternate host ports:
 ```bash
 API_PORT=3101 WEB_PORT=3100 VITE_API_BASE_URL=http://localhost:3101 CORS_ORIGINS=http://localhost:3100 docker compose up --build
 ```
+
+## Staging
+
+Render staging is live:
+
+```text
+https://clinic-ai-copilot-web-staging.onrender.com
+https://clinic-ai-copilot-api-staging.onrender.com/api/health
+```
+
+Staging is backed by the configured MongoDB Atlas staging connection. AI summary
+generation requires `OLLAMA_URL` to point to a cloud-reachable Ollama server.
 
 ## Useful Scripts
 

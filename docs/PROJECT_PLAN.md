@@ -25,7 +25,7 @@ reviewed summary is saved with the original doctor note.
 | AI       | Local Ollama server, model `llama3.1:8b` at `http://localhost:11434` | Completed |
 | Auth     | Multiple doctors, isolated data, real JWT                            | Completed |
 | Search   | MongoDB text search (semantic later)                                 | Completed |
-| Infra    | Docker Compose and Render staging Blueprint                          | Partial   |
+| Infra    | Docker Compose and Render staging deployment                         | Completed |
 | Tooling  | Yarn workspaces, ESLint, Prettier                                    | Completed |
 
 ## 3. Roles & Data Isolation
@@ -153,7 +153,7 @@ Planned:
 | 7     | Patient timeline                            | Completed |
 | 8     | AI summarization (Ollama) + review workflow | Completed |
 | 9     | Note search + audit log                     | Completed |
-| 10    | Dockerize + Render staging                  | Partial   |
+| 10    | Dockerize + Render staging                  | Completed |
 
 ## 8. Known Limitations (current)
 
@@ -170,7 +170,9 @@ Planned:
 - Forgot/reset password is not built yet.
 - Auth is development-ready but not production hardened with rate limiting or
   httpOnly cookie sessions yet.
-- Docker Compose is available for local container runs. A production hosting
-  target and CI/CD pipeline are still pending.
-- Render staging is prepared with `render.yaml`, but the live staging services
-  still need to be created in the Render Dashboard.
+- Docker Compose is available for local container runs.
+- Render staging is live at
+  `https://clinic-ai-copilot-web-staging.onrender.com`.
+- Production hardening, custom domains, and CI/CD are still pending.
+- Staging AI summary generation requires `OLLAMA_URL` to point to a reachable
+  Ollama server.
