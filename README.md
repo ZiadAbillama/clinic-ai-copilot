@@ -4,7 +4,7 @@ Clinic AI Copilot is a doctor-facing clinic workspace built as a staged training
 
 ## Current Stage
 
-Current stage: Stage 9 complete - note search, audit history, and doctor-reviewed AI summaries. Stage 10, Docker/deployment, is next.
+Current stage: Stage 10 in progress - Docker Compose and container build files are available. A production hosting target and CI/CD pipeline are still pending.
 
 Implemented:
 
@@ -21,6 +21,7 @@ Implemented:
 - MongoDB text search over active notes
 - Recent audit log viewer
 - Pagination for patients, appointments, visits, notes, timeline, note search, and audit log
+- Docker Compose setup for local API/web containers
 
 Not yet implemented:
 
@@ -80,6 +81,7 @@ AI:
 
 ```env
 OLLAMA_URL=http://localhost:11434
+DOCKER_OLLAMA_URL=http://host.docker.internal:11434
 OLLAMA_MODEL=llama3.1:8b
 OLLAMA_TIMEOUT_MS=45000
 ```
@@ -125,6 +127,39 @@ Open:
 http://localhost:3000
 ```
 
+## Docker Startup Flow
+
+The Docker setup uses the same root `.env` file. Fill in `.env` first, then run:
+
+```bash
+docker compose up --build
+```
+
+Open:
+
+```text
+http://localhost:3000
+```
+
+Seed MongoDB Atlas through Docker when needed:
+
+```bash
+docker compose run --rm api yarn api:seed
+```
+
+When using Ollama from Docker, keep Ollama running on the host and use:
+
+```env
+DOCKER_OLLAMA_URL=http://host.docker.internal:11434
+```
+
+If local dev servers are already using ports `3000` and `3001`, run Docker on
+alternate host ports:
+
+```bash
+API_PORT=3101 WEB_PORT=3100 VITE_API_BASE_URL=http://localhost:3101 CORS_ORIGINS=http://localhost:3100 docker compose up --build
+```
+
 ## Useful Scripts
 
 ```bash
@@ -132,6 +167,9 @@ yarn web:lint
 yarn api:lint
 yarn lint
 yarn web:build
+yarn docker:build
+yarn docker:up
+yarn docker:down
 ```
 
 ## Notes
@@ -144,3 +182,4 @@ yarn web:build
 - Visit statuses come from the API status endpoint, not a duplicated frontend list.
 - AI summaries are drafts until a doctor accepts or rejects them. Editing the original note invalidates prior summaries.
 - Ollama must be running locally for AI summary generation.
+- See `infra/docker/README.md` for container usage and `infra/deployment/README.md` for deployment notes.

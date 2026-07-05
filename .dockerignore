@@ -1,0 +1,40 @@
+# Git and local metadata
+.git/
+.codex/
+.agents/
+.vscode/
+
+# Dependencies
+node_modules/
+apps/*/node_modules/
+services/*/node_modules/
+.pnp.*
+.yarn/*
+!.yarn/patches/
+!.yarn/plugins/
+!.yarn/releases/
+!.yarn/sdks/
+!.yarn/versions/
+
+# Build outputs
+dist/
+build/
+.next/
+apps/*/dist/
+apps/*/.next/
+coverage/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Logs and local runtime files
+*.log
+*.pid
+tmp/
+data/
+
+# OS files
+.DS_Store
+Thumbs.db
