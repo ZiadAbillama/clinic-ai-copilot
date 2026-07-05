@@ -17,8 +17,8 @@ Stage 10 is complete for staging:
 - Local Docker Compose is validated.
 - Render staging is live.
 - The staging API and web app were smoke-tested end to end.
-- Production hardening, CI/CD, custom domains, and cloud AI hosting are still
-  pending.
+- GitHub Actions CI runs formatting, lint, and web build checks.
+- Production hardening, custom domains, and cloud AI hosting are still pending.
 
 Live staging:
 
@@ -63,6 +63,7 @@ Ollama does not work from Render.
 - Soft archive behavior for patients, appointments, and notes
 - Local Docker Compose setup for API/web containers
 - Render staging deployment through `render.yaml`
+- GitHub Actions CI for formatting, linting, and web builds
 
 ## Not Yet Implemented
 
@@ -72,7 +73,7 @@ Ollama does not work from Render.
 - Full role-based access control beyond the doctor role
 - Login/register rate limiting
 - httpOnly cookie session strategy
-- CI/CD pipeline
+- Production CI/CD workflow beyond staging checks
 - Production deployment with custom domains and production secrets
 
 ## Tech Stack
@@ -299,6 +300,12 @@ yarn format
 yarn format:check
 ```
 
+## Continuous Integration
+
+GitHub Actions runs on pushes to `main` and on pull requests. The CI workflow
+checks formatting, lints the frontend and API workspaces, and builds the web
+app. Render staging is configured to auto-deploy after GitHub checks pass.
+
 ## Security And Data Notes
 
 - Do not commit `.env` files or real secrets.
@@ -321,13 +328,13 @@ yarn format:check
 - Auth is suitable for development/staging but not yet production-hardened.
 - Forgot/reset password is not implemented.
 - Semantic search is not implemented.
-- No CI/CD pipeline is configured yet.
+- CI checks exist, but production deployment automation is not configured yet.
 
 ## Recommended Next Steps
 
 1. Decide the AI provider strategy for staging.
 2. Add production auth hardening: rate limiting, password reset, and safer
    session handling.
-3. Add CI checks before Render auto-deploys.
-4. Prepare production environment values and custom domains.
+3. Prepare production environment values and custom domains.
+4. Add production deployment automation.
 5. Add semantic search only after the core clinical workflow is stable.

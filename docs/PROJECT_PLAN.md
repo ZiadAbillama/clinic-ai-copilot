@@ -26,7 +26,7 @@ reviewed summary is saved with the original doctor note.
 | Auth     | Multiple doctors, isolated data, real JWT                            | Completed |
 | Search   | MongoDB text search (semantic later)                                 | Completed |
 | Infra    | Docker Compose and Render staging deployment                         | Completed |
-| Tooling  | Yarn workspaces, ESLint, Prettier                                    | Completed |
+| Tooling  | Yarn workspaces, ESLint, Prettier, GitHub Actions CI                 | Completed |
 
 ## 3. Roles & Data Isolation
 
@@ -173,6 +173,9 @@ Planned:
 - Docker Compose is available for local container runs.
 - Render staging is live at
   `https://clinic-ai-copilot-web-staging.onrender.com`.
-- Production hardening, custom domains, and CI/CD are still pending.
+- GitHub Actions CI runs formatting, lint, and web build checks before Render
+  staging auto-deploys.
+- Production hardening, custom domains, and production deployment automation are
+  still pending.
 - Staging AI summary generation requires `OLLAMA_URL` to point to a reachable
   Ollama server.

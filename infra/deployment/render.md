@@ -18,6 +18,9 @@ https://clinic-ai-copilot-api-staging.onrender.com
 
 The deployed web bundle points to the deployed staging API URL.
 
+Render staging is configured to deploy after GitHub checks pass. The checks are
+defined in `.github/workflows/ci.yml`.
+
 ## Before Creating The Blueprint
 
 Create or choose a MongoDB Atlas database for staging. Do not point staging at

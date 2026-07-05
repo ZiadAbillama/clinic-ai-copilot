@@ -8,7 +8,7 @@ services:
     dockerfilePath: ./infra/docker/api.Dockerfile
     dockerContext: .
     healthCheckPath: /api/health
-    autoDeployTrigger: commit
+    autoDeployTrigger: checksPass
     envVars:
       - key: NODE_ENV
         value: production
@@ -52,7 +52,7 @@ services:
     dockerfilePath: ./infra/docker/web.Dockerfile
     dockerContext: .
     healthCheckPath: /healthz
-    autoDeployTrigger: commit
+    autoDeployTrigger: checksPass
     envVars:
       - key: PORT
         value: 80
