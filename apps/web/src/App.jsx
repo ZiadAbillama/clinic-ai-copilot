@@ -5,10 +5,8 @@ import {
   CheckCircle2,
   FileText,
   HeartPulse,
-  Pencil,
   Plus,
   Search,
-  Trash2,
   X,
 } from 'lucide-react';
 
@@ -25,14 +23,7 @@ const appointmentPageLimit = 8;
 const detailPageLimit = 5;
 const noteSearchPageLimit = 6;
 const auditLogPageLimit = 8;
-const visitStatuses = Object.freeze([
-  'Scheduled',
-  'Checked in',
-  'Needs vitals',
-  'Doctor review',
-  'Completed',
-  'Cancelled',
-]);
+const newPatientDisplayLabel = 'New patient';
 
 function getTodayDateString() {
   const now = new Date();
@@ -71,6 +62,36 @@ function formatAge(dob) {
   return age === null ? 'Not set' : `${age}y`;
 }
 
+function getPatientInitials(name = '') {
+  return (
+    name
+      .split(' ')
+      .filter(Boolean)
+      .map((part) => part[0])
+      .join('')
+      .slice(0, 2)
+      .toUpperCase() || 'PT'
+  );
+}
+
+function formatShortDate(value) {
+  if (!value || value === newPatientDisplayLabel) return value || 'Not set';
+
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return date.toLocaleDateString(undefined, {
+    month: 'short',
+    day: '2-digit',
+    year: 'numeric',
+  });
+}
+
+function formatVisitDateTime(dateValue, timeValue) {
+  const date = formatShortDate(dateValue);
+  return timeValue ? `${date}, ${timeValue}` : date;
+}
+
 function formatDateTime(value) {
   if (!value) return 'Not set';
 
@@ -94,6 +115,23 @@ function formatAuditAction(action) {
     .join(' ');
 }
 
+function formatAiSummaryStatus(status) {
+  if (status === 'approved') return 'Reviewed by doctor';
+  if (status === 'rejected') return 'Rejected';
+  if (status === 'draft') return 'Draft';
+  return status || 'Draft';
+}
+
+function getPatientCurrentStatus(patient) {
+  if (patient.currentStatus) return patient.currentStatus;
+  if (!patient.lastVisitDate) return newPatientDisplayLabel;
+  return patient.status || newPatientDisplayLabel;
+}
+
+function getPatientLastVisitDate(patient) {
+  return patient.lastVisitDate || newPatientDisplayLabel;
+}
+
 const emptyPatientForm = {
   name: '',
   dob: '',
@@ -101,12 +139,12 @@ const emptyPatientForm = {
   lastVisit: '',
 };
 
-function createEmptyAppointmentForm() {
+function createEmptyAppointmentForm(defaultVisitStatus = '') {
   return {
     scheduledDate: getTodayDateString(),
     scheduledTime: '',
     reason: '',
-    status: 'Scheduled',
+    status: defaultVisitStatus,
   };
 }
 
@@ -169,7 +207,22 @@ function createPagination(limit) {
   };
 }
 
-function PaginationControls({ disabled = false, label, onNext, onPrevious, pagination }) {
+function PaginationControls({
+  disabled = false,
+  itemCount = 0,
+  label,
+  onNext,
+  onPrevious,
+  pagination,
+}) {
+  const totalPages = Number(pagination.totalPages);
+  const hasKnownTotalPages = Number.isFinite(totalPages) && totalPages > 0;
+  const hasMultiplePages = hasKnownTotalPages
+    ? totalPages > 1
+    : pagination.page > 1 || pagination.hasNextPage;
+
+  if (itemCount === 0 || !hasMultiplePages) return null;
+
   return (
     <nav className="paginationBar" aria-label={`${label} pagination`}>
       <span>
@@ -195,6 +248,8 @@ export default function App() {
   const [authForm, setAuthForm] = useState(emptyAuthForm);
   const [authStatus, setAuthStatus] = useState(authToken ? 'Checking' : 'Idle');
   const [authError, setAuthError] = useState('');
+  const [visitStatuses, setVisitStatuses] = useState([]);
+  const defaultVisitStatus = visitStatuses[0] || '';
   const [patients, setPatients] = useState([]);
   const [patientsState, setPatientsState] = useState('Loading');
   const [patientsError, setPatientsError] = useState('');
@@ -223,17 +278,16 @@ export default function App() {
   const [patientForm, setPatientForm] = useState(emptyPatientForm);
   const [formStatus, setFormStatus] = useState('Idle');
   const [formError, setFormError] = useState('');
-  const [manageMode, setManageMode] = useState(false);
   const [notice, setNotice] = useState(null);
   const [patientPendingDelete, setPatientPendingDelete] = useState(null);
   const [deleteStatus, setDeleteStatus] = useState('Idle');
   const [appointmentFormMode, setAppointmentFormMode] = useState('closed');
   const [appointmentFormContext, setAppointmentFormContext] = useState('patient');
   const [appointmentPatientId, setAppointmentPatientId] = useState('');
-  const [appointmentForm, setAppointmentForm] = useState(createEmptyAppointmentForm);
+  const [appointmentForm, setAppointmentForm] = useState(() => createEmptyAppointmentForm());
   const [appointmentFormStatus, setAppointmentFormStatus] = useState('Idle');
   const [appointmentFormError, setAppointmentFormError] = useState('');
-  const [visitsOpen, setVisitsOpen] = useState(false);
+  const [visitsOpen, setVisitsOpen] = useState(true);
   const [editingAppointmentId, setEditingAppointmentId] = useState('');
   const [archivingAppointmentId, setArchivingAppointmentId] = useState('');
   const [activeAppointment, setActiveAppointment] = useState(null);
@@ -281,6 +335,7 @@ export default function App() {
     window.localStorage.removeItem(authStorageKey);
     setAuthToken('');
     setDoctor(null);
+    setVisitStatuses([]);
     setPatients([]);
     setTodayAppointments([]);
     setAppointments([]);
@@ -324,6 +379,39 @@ export default function App() {
       }),
     [authToken, clearSession],
   );
+
+  const loadVisitStatuses = useCallback(() => {
+    if (!authToken) {
+      setVisitStatuses([]);
+      return Promise.resolve([]);
+    }
+
+    return apiFetch('/api/statuses')
+      .then(async (res) => {
+        if (!res.ok) throw res;
+        return res.json();
+      })
+      .then((data) => {
+        const nextStatuses = Array.isArray(data.visitStatuses)
+          ? data.visitStatuses.filter(Boolean)
+          : [];
+
+        setVisitStatuses(nextStatuses);
+        setAppointmentForm((currentForm) => {
+          if (currentForm.status && nextStatuses.includes(currentForm.status)) return currentForm;
+          return {
+            ...currentForm,
+            status: nextStatuses[0] || '',
+          };
+        });
+
+        return nextStatuses;
+      })
+      .catch(() => {
+        setVisitStatuses([]);
+        return [];
+      });
+  }, [apiFetch, authToken]);
 
   const resetAiSummaryState = useCallback(() => {
     setAiSummary(null);
@@ -470,7 +558,7 @@ export default function App() {
       scheduledDate: appointment?.scheduledDate || getTodayDateString(),
       scheduledTime: appointment?.scheduledTime || '',
       reason: appointment?.reason || '',
-      status: appointment?.status || 'Scheduled',
+      status: appointment?.status || defaultVisitStatus,
     });
   }
 
@@ -584,9 +672,6 @@ export default function App() {
 
   function startDashboardAppointmentForm() {
     startAppointmentForm('create', '', 'dashboard');
-    window.setTimeout(() => {
-      document.getElementById('appointment-schedule-form')?.scrollIntoView({ block: 'center' });
-    }, 0);
   }
 
   function closeNoteForm() {
@@ -604,7 +689,7 @@ export default function App() {
     setTimelinePage(1);
     closeAppointmentForm();
     closeNoteForm();
-    setVisitsOpen(false);
+    setVisitsOpen(true);
     setTimelineOpen(false);
   }
 
@@ -1061,6 +1146,11 @@ export default function App() {
       return;
     }
 
+    if (!appointmentForm.status) {
+      setAppointmentFormError('Visit statuses are unavailable. Refresh and try again.');
+      return;
+    }
+
     const existingAppointment = editingAppointmentId ? findAppointment(editingAppointmentId) : null;
     const isEditing = appointmentFormMode === 'edit' && existingAppointment;
     const url = isEditing
@@ -1211,8 +1301,7 @@ export default function App() {
         setAppointmentNoteStatus('Saved');
         setNotice({
           tone: 'success',
-          title: 'Clinical note saved',
-          text: `${activeAppointment.patient?.name || 'Patient'} note is ready for AI review.`,
+          title: 'Clinical Note Saved',
         });
         return Promise.all([
           loadTimeline(activeAppointment.patientId, 1),
@@ -1428,6 +1517,10 @@ export default function App() {
   }, [deleteStatus, patientPendingDelete]);
 
   useEffect(() => {
+    loadVisitStatuses();
+  }, [loadVisitStatuses]);
+
+  useEffect(() => {
     refreshWorkspace();
   }, [refreshWorkspace]);
 
@@ -1527,24 +1620,40 @@ export default function App() {
   const showAiSummaryPanel =
     Boolean(aiSummary) || ['Generating', 'SavingReview', 'Error'].includes(aiSummaryStatus);
   const isAiSummaryBusy = aiSummaryStatus === 'Generating' || aiSummaryStatus === 'SavingReview';
+  const isAiSummaryApproved = aiSummary?.status === 'approved';
+  const isAiSummaryRejected = aiSummary?.status === 'rejected';
+  const aiSummaryHeading = isAiSummaryApproved
+    ? 'AI summary saved'
+    : isAiSummaryRejected
+      ? 'Draft rejected'
+      : 'Review before saving';
+  const appointmentNoteSaveLabel =
+    appointmentNoteStatus === 'Saving'
+      ? 'Saving note...'
+      : appointmentNoteStatus === 'Loading'
+        ? 'Loading note...'
+        : appointmentNoteStatus === 'Editing'
+          ? 'Save changes'
+          : 'Save doctor note';
+  const appointmentNoteSaveDisabled = ['Loading', 'Saving'].includes(appointmentNoteStatus);
 
   const patientFormSection = (
-    <section className="formCard" aria-labelledby="patient-form-title">
-      <div className="formHeader">
+    <section className="formCard patientEditCard" aria-labelledby="patient-form-title">
+      <div className="patientEditHeader">
+        <span className="patientAvatar patientEditAvatar" aria-hidden="true">
+          {getPatientInitials(patientForm.name || selectedPatient?.name)}
+        </span>
         <div>
-          <p className="eyebrow">{formMode === 'edit' ? 'Modify patient' : 'Add patient'}</p>
           <h2 id="patient-form-title">
-            {formMode === 'edit' ? 'Update patient file' : 'Create patient'}
+            {formMode === 'edit' ? selectedPatient?.name || 'Edit patient' : newPatientDisplayLabel}
           </h2>
+          <p>{formMode === 'edit' ? 'Update primary information' : 'Create patient profile'}</p>
         </div>
-        <button type="button" aria-label="Close patient form" onClick={closePatientForm}>
-          <X size={18} />
-        </button>
       </div>
 
-      <form className="patientForm" onSubmit={handlePatientSubmit}>
+      <form className="patientForm patientEditForm" onSubmit={handlePatientSubmit}>
         <label>
-          Name
+          Full name
           <input
             name="name"
             value={patientForm.name}
@@ -1558,7 +1667,7 @@ export default function App() {
           <input name="dob" value={patientForm.dob} onChange={handleFormChange} type="date" />
         </label>
         <label>
-          Contact
+          Contact number
           <input
             name="contact"
             value={patientForm.contact}
@@ -1566,20 +1675,22 @@ export default function App() {
             placeholder="+961 ..."
           />
         </label>
-        <label>
-          Last visit
-          <input
-            name="lastVisit"
-            value={patientForm.lastVisit}
-            onChange={handleFormChange}
-            placeholder="YYYY-MM-DD or New patient"
-          />
-        </label>
+        {formMode === 'edit' && (
+          <label>
+            Patient ID (read-only)
+            <input value={selectedPatientId} readOnly />
+          </label>
+        )}
         {formError && <p className="formMessage error">{formError}</p>}
 
-        <button className="primaryButton" disabled={formStatus === 'Saving'} type="submit">
-          {formStatus === 'Saving' ? 'Saving...' : 'Save patient'}
-        </button>
+        <div className="formActions">
+          <button type="button" onClick={closePatientForm}>
+            Cancel
+          </button>
+          <button className="primaryButton" disabled={formStatus === 'Saving'} type="submit">
+            {formStatus === 'Saving' ? 'Saving...' : 'Save changes'}
+          </button>
+        </div>
       </form>
     </section>
   );
@@ -1593,7 +1704,13 @@ export default function App() {
     const search = patientSearch.trim().toLowerCase();
     if (!search) return true;
 
-    return [patient.name, patient.id, patient.contact, patient.status, patient.reason]
+    return [
+      patient.name,
+      patient.id,
+      patient.contact,
+      getPatientCurrentStatus(patient),
+      getPatientLastVisitDate(patient),
+    ]
       .join(' ')
       .toLowerCase()
       .includes(search);
@@ -1639,24 +1756,29 @@ export default function App() {
           />
         </label>
         <label>
-          Status
+          Visit status
           <select
             name="status"
             value={appointmentForm.status}
             onChange={handleAppointmentFormChange}
           >
+            {visitStatuses.length === 0 && <option value="">Loading statuses</option>}
+            {appointmentForm.status && !visitStatuses.includes(appointmentForm.status) && (
+              <option value={appointmentForm.status}>{appointmentForm.status}</option>
+            )}
             {visitStatuses.map((status) => (
               <option key={status}>{status}</option>
             ))}
           </select>
         </label>
         <label className="wideField">
-          Reason
-          <input
+          Reason for visit & notes
+          <textarea
             name="reason"
             value={appointmentForm.reason}
             onChange={handleAppointmentFormChange}
-            placeholder="Visit reason"
+            placeholder="Enter clinical notes or patient reported symptoms..."
+            rows={5}
           />
         </label>
 
@@ -1671,7 +1793,11 @@ export default function App() {
             disabled={appointmentFormStatus === 'Saving'}
             type="submit"
           >
-            {appointmentFormStatus === 'Saving' ? 'Saving...' : 'Save appointment'}
+            {appointmentFormStatus === 'Saving'
+              ? 'Saving...'
+              : appointmentFormMode === 'edit'
+                ? 'Save visit'
+                : 'Schedule appointment'}
           </button>
         </div>
       </form>
@@ -1822,13 +1948,13 @@ export default function App() {
   }
 
   return (
-    <main className="appShell">
+    <main className="appShell appDashboardShell doctorAppShell" id="top">
       {notice && (
         <div className={`toast ${notice.tone}`} role="status">
           <CheckCircle2 size={18} />
           <div>
             <strong>{notice.title}</strong>
-            <span>{notice.text}</span>
+            {notice.text && <span>{notice.text}</span>}
           </div>
           <button type="button" aria-label="Dismiss notification" onClick={() => setNotice(null)}>
             <X size={16} />
@@ -1880,19 +2006,55 @@ export default function App() {
         </div>
       )}
 
-      <a className="skipLink" href="#appointments">
-        Skip to appointments
+      {appointmentFormOpen && (
+        <div className="modalOverlay scheduleOverlay" role="presentation">
+          <section
+            className="scheduleModal"
+            role="dialog"
+            aria-labelledby="schedule-modal-title"
+            aria-modal="true"
+          >
+            <div className="scheduleModalHeader">
+              <div>
+                <h2 id="schedule-modal-title">
+                  {appointmentFormMode === 'edit' ? 'Edit visit' : 'Schedule visit'}
+                </h2>
+                <p>
+                  Patient:{' '}
+                  {appointmentFormContext === 'dashboard'
+                    ? patients.find((patient) => patient.id === appointmentPatientId)?.name ||
+                      'Choose patient'
+                    : selectedPatient?.name || 'Selected patient'}
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label="Close schedule visit"
+                onClick={closeAppointmentForm}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            {renderAppointmentForm({
+              includePatientSelect: appointmentFormContext === 'dashboard',
+            })}
+          </section>
+        </div>
+      )}
+
+      <a className="skipLink" href="#patient-workspace">
+        Skip to patient workspace
       </a>
 
-      <header className="topBar">
-        <a className="brand" href="#top" aria-label="Clinic AI Copilot home">
-          <img
-            className="brandLogo"
-            src="/brand/clinikit-logo-horizontal.webp"
-            alt="CliniKit"
-            width={478}
-            height={104}
-          />
+      <header className="topBar appTopBar">
+        <a className="appBrand" href="#top" aria-label="Clinic AI Copilot home">
+          <svg className="clinikitMark" viewBox="0 0 82 52" aria-hidden="true" focusable="false">
+            <rect x="0" y="18" width="23" height="16" rx="2" />
+            <rect x="25" y="0" width="23" height="17" rx="2" />
+            <rect x="25" y="35" width="23" height="17" rx="2" />
+            <path d="M54 0H82L64 25.5L82 52H55L38 26L54 0Z" />
+          </svg>
+          <span className="clinikitName">CliniKit</span>
         </a>
         <button className="sessionButton" type="button" onClick={signOut}>
           Sign out
@@ -1900,22 +2062,11 @@ export default function App() {
         </button>
       </header>
 
-      <section className="overview" id="top" aria-labelledby="overview-title">
-        <img
-          className="heroBackground"
-          src="/brand/clinikit-hero-background.webp"
-          alt=""
-          aria-hidden="true"
-        />
-
-        <div className="overviewCopy">
-          <p className="eyebrow">Doctor workspace</p>
-          <h1 id="overview-title">Clinic AI Copilot</h1>
-          <p>Open today&apos;s appointments, write the note, then bring in AI when ready.</p>
-        </div>
-      </section>
-
-      <section className="workspace" aria-label="Doctor workspace">
+      <section
+        className="workspace doctorWorkspace"
+        id="patient-workspace"
+        aria-label="Doctor workspace"
+      >
         {activeAppointment ? (
           <section
             className="appointmentPage"
@@ -1926,7 +2077,9 @@ export default function App() {
               <button type="button" onClick={closeAppointmentWorkspace}>
                 Back to appointments
               </button>
-              <span className="statusPill">{activeAppointment.status}</span>
+              <span className="statusPill" data-status={activeAppointment.status}>
+                {activeAppointment.status}
+              </span>
             </div>
 
             <section className="appointmentContextPanel">
@@ -1999,12 +2152,14 @@ export default function App() {
                       <article className="visitRow" key={visit.id}>
                         <div className="visitDateCell">
                           <time dateTime={visitDateTime}>
-                            {visit.scheduledDate} {visit.scheduledTime}
+                            {formatVisitDateTime(visit.scheduledDate, visit.scheduledTime)}
                           </time>
                         </div>
                         <strong>{visit.reason || 'No reason'}</strong>
                         <span>{isCurrentVisit ? 'Current' : 'Previous'}</span>
-                        <span className="statusPill">{visit.status}</span>
+                        <span className="statusPill" data-status={visit.status}>
+                          {visit.status}
+                        </span>
                         <span>{isCurrentVisit ? 'Open now' : 'History'}</span>
                       </article>
                     );
@@ -2014,36 +2169,58 @@ export default function App() {
             )}
 
             <form className="clinicalNotePanel" onSubmit={handleAppointmentNoteSubmit}>
-              <label>
-                <span>Doctor note</span>
-                <textarea
-                  value={appointmentNoteText}
-                  onChange={(event) => {
-                    setAppointmentNoteText(event.target.value);
-                    setAppointmentNoteError('');
-                    if (appointmentNoteStatus === 'Saved') {
-                      setAppointmentNoteStatus('Editing');
-                      resetAiSummaryState();
-                    }
-                  }}
-                  placeholder="Write clinical note here..."
-                  rows={12}
-                />
-              </label>
+              {appointmentNoteStatus === 'Saved' ? (
+                <div className="clinicalNoteReadOnly">
+                  <span>Doctor note</span>
+                  <div className="clinicalNoteDisplay">
+                    {appointmentNoteText || 'No note saved.'}
+                  </div>
+                </div>
+              ) : (
+                <label>
+                  <span>Doctor note</span>
+                  <textarea
+                    disabled={appointmentNoteStatus === 'Loading'}
+                    value={appointmentNoteText}
+                    onChange={(event) => {
+                      setAppointmentNoteText(event.target.value);
+                      setAppointmentNoteError('');
+                    }}
+                    placeholder="Write clinical note here..."
+                    rows={12}
+                  />
+                </label>
+              )}
 
               {appointmentNoteError && <p className="formMessage error">{appointmentNoteError}</p>}
 
               <div className="appointmentNoteActions">
-                <button
-                  className="primaryButton"
-                  disabled={appointmentNoteStatus === 'Saving'}
-                  type="submit"
-                >
-                  {appointmentNoteStatus === 'Saving' ? 'Saving note...' : 'Save doctor note'}
-                </button>
+                {appointmentNoteStatus === 'Saved' ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAppointmentNoteStatus('Editing');
+                      resetAiSummaryState();
+                    }}
+                  >
+                    Edit note
+                  </button>
+                ) : (
+                  <button
+                    className="primaryButton"
+                    disabled={appointmentNoteSaveDisabled}
+                    type="submit"
+                  >
+                    {appointmentNoteSaveLabel}
+                  </button>
+                )}
                 <button
                   type="button"
-                  disabled={!appointmentNote || appointmentNoteStatus === 'Saving'}
+                  disabled={
+                    !appointmentNote ||
+                    appointmentNoteStatus === 'Loading' ||
+                    appointmentNoteStatus === 'Saving'
+                  }
                   onClick={handleGenerateAiSummary}
                 >
                   Generate AI Summary
@@ -2055,10 +2232,19 @@ export default function App() {
               <section className="aiSummaryPanel" aria-labelledby="ai-summary-title">
                 <div className="aiSummaryHeader">
                   <div>
-                    <p className="eyebrow">AI draft summary</p>
-                    <h3 id="ai-summary-title">Review before saving</h3>
+                    <p className="eyebrow">
+                      {isAiSummaryApproved ? 'AI summary' : 'AI draft summary'}
+                    </p>
+                    <h3
+                      className={isAiSummaryApproved ? 'srOnly' : undefined}
+                      id="ai-summary-title"
+                    >
+                      {aiSummaryHeading}
+                    </h3>
                   </div>
-                  {aiSummary && <span className="statusPill">{aiSummary.status}</span>}
+                  {aiSummary && (
+                    <span className="statusPill">{formatAiSummaryStatus(aiSummary.status)}</span>
+                  )}
                 </div>
 
                 {aiSummaryStatus === 'Generating' && (
@@ -2068,7 +2254,9 @@ export default function App() {
 
                 {aiSummary && (
                   <>
-                    {aiSummaryEditing ? (
+                    {isAiSummaryRejected ? (
+                      <p className="formMessage">This AI draft was rejected.</p>
+                    ) : aiSummaryEditing ? (
                       <div className="aiSummaryEditor">
                         <label>
                           Short summary
@@ -2128,38 +2316,40 @@ export default function App() {
                       </dl>
                     )}
 
-                    <div className="aiSummaryActions">
-                      <button
-                        className="primaryButton"
-                        disabled={isAiSummaryBusy || aiSummary.status === 'rejected'}
-                        type="button"
-                        onClick={() => reviewAiSummary('approved')}
-                      >
-                        {aiSummaryStatus === 'SavingReview' ? 'Saving...' : 'Accept summary'}
-                      </button>
-                      <button
-                        disabled={isAiSummaryBusy || aiSummary.status === 'rejected'}
-                        type="button"
-                        onClick={() => setAiSummaryEditing((current) => !current)}
-                      >
-                        {aiSummaryEditing ? 'Stop editing' : 'Edit'}
-                      </button>
-                      <button
-                        disabled={isAiSummaryBusy}
-                        type="button"
-                        onClick={handleGenerateAiSummary}
-                      >
-                        Regenerate
-                      </button>
-                      <button
-                        className="dangerTextButton"
-                        disabled={isAiSummaryBusy || aiSummary.status === 'rejected'}
-                        type="button"
-                        onClick={() => reviewAiSummary('rejected')}
-                      >
-                        Reject
-                      </button>
-                    </div>
+                    {!isAiSummaryApproved && !isAiSummaryRejected && (
+                      <div className="aiSummaryActions">
+                        <button
+                          className="primaryButton"
+                          disabled={isAiSummaryBusy}
+                          type="button"
+                          onClick={() => reviewAiSummary('approved')}
+                        >
+                          {aiSummaryStatus === 'SavingReview' ? 'Saving...' : 'Accept summary'}
+                        </button>
+                        <button
+                          disabled={isAiSummaryBusy}
+                          type="button"
+                          onClick={() => setAiSummaryEditing((current) => !current)}
+                        >
+                          {aiSummaryEditing ? 'Stop editing' : 'Edit'}
+                        </button>
+                        <button
+                          disabled={isAiSummaryBusy}
+                          type="button"
+                          onClick={handleGenerateAiSummary}
+                        >
+                          Regenerate
+                        </button>
+                        <button
+                          className="dangerTextButton"
+                          disabled={isAiSummaryBusy}
+                          type="button"
+                          onClick={() => reviewAiSummary('rejected')}
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    )}
                   </>
                 )}
               </section>
@@ -2194,16 +2384,6 @@ export default function App() {
                   </button>
                 </div>
               </div>
-
-              {appointmentFormOpen && appointmentFormContext === 'dashboard' && (
-                <section
-                  className="appointmentSchedulePanel"
-                  id="appointment-schedule-form"
-                  aria-label="Schedule appointment"
-                >
-                  {renderAppointmentForm({ includePatientSelect: true })}
-                </section>
-              )}
 
               <div className="appointmentList">
                 <div className="appointmentTableHeader" aria-hidden="true">
@@ -2240,7 +2420,9 @@ export default function App() {
                     </div>
                     <span>{formatDobWithAge(appointment.patient?.dob)}</span>
                     <strong>{appointment.reason || 'No reason'}</strong>
-                    <span className="statusPill">{appointment.status}</span>
+                    <span className="statusPill" data-status={appointment.status}>
+                      {appointment.status}
+                    </span>
                     <button type="button" onClick={() => openAppointment(appointment)}>
                       Open appointment
                     </button>
@@ -2250,6 +2432,7 @@ export default function App() {
 
               <PaginationControls
                 disabled={todayAppointmentsState === 'Loading'}
+                itemCount={todayAppointments.length}
                 label="Appointments"
                 pagination={todayAppointmentsPagination}
                 onPrevious={previousTodayAppointmentsPage}
@@ -2257,35 +2440,30 @@ export default function App() {
               />
             </div>
 
-            <div className="patientPanel" id="patients">
-              <div className="panelHeader">
+            <div className="patientPanel patientDirectory" id="patients">
+              <div className="panelHeader patientDirectoryHeader">
                 <div>
-                  <p className="eyebrow">Records</p>
                   <h2>Patients</h2>
+                  <p>Patient directory</p>
                 </div>
                 <div className="panelActions">
-                  <label className="patientSearch">
-                    <span>Search patients</span>
-                    <input
-                      value={patientSearch}
-                      onChange={(event) => setPatientSearch(event.target.value)}
-                      placeholder="Search patients..."
-                      type="search"
-                    />
-                  </label>
                   <button type="button" onClick={startNewPatient}>
                     <Plus size={16} />
                     Add patient
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setManageMode((currentMode) => !currentMode)}
-                  >
-                    {manageMode ? <X size={16} /> : <Pencil size={16} />}
-                    {manageMode ? 'Done' : 'Edit'}
-                  </button>
                 </div>
               </div>
+
+              <label className="patientSearch directorySearch">
+                <span>Search patients</span>
+                <Search size={16} />
+                <input
+                  value={patientSearch}
+                  onChange={(event) => setPatientSearch(event.target.value)}
+                  placeholder="Search patients..."
+                  type="search"
+                />
+              </label>
 
               <div className="patientList">
                 <div className="patientTableHeader" aria-hidden="true">
@@ -2315,82 +2493,71 @@ export default function App() {
                     <p className="patientMessage">No patients match that search.</p>
                   )}
 
-                {filteredPatients.map((patient) => (
-                  <article
-                    className={
-                      patient.id === selectedPatientId ? 'patientRow selected' : 'patientRow'
-                    }
-                    key={patient.id}
-                  >
-                    <button
-                      className="patientSelect"
-                      type="button"
-                      aria-pressed={patient.id === selectedPatientId}
-                      onClick={() => selectPatient(patient.id)}
-                    >
-                      <div className="patientIdentity">
-                        <span className="patientAvatar" aria-hidden="true">
-                          {patient.name
-                            .split(' ')
-                            .map((part) => part[0])
-                            .join('')
-                            .slice(0, 2)}
-                        </span>
-                        <span>
-                          <strong>{patient.name}</strong>
-                          <small>ID: {patient.id}</small>
-                          <small className="mobilePatientMeta">
-                            {formatDobWithAge(patient.dob)}
-                          </small>
-                        </span>
-                      </div>
-                      <div className="patientField" data-label="DOB">
-                        <span>{patient.dob || 'Not set'}</span>
-                        <small>
-                          {patient.lastVisit === 'New patient' ? 'New patient' : 'Patient file'}
-                        </small>
-                      </div>
-                      <span className="patientField" data-label="Contact">
-                        {patient.contact || 'No contact'}
-                      </span>
-                      <span className="patientField" data-label="Last visit">
-                        {patient.lastVisit || 'None'}
-                      </span>
-                      <span className="patientField" data-label="Notes">
-                        {patient.noteCount}
-                      </span>
-                      <span className="patientField patientStatusField" data-label="Status">
-                        <span className="statusPill">{patient.status || 'Scheduled'}</span>
-                      </span>
-                    </button>
+                {filteredPatients.map((patient) => {
+                  const currentStatus = getPatientCurrentStatus(patient);
+                  const lastVisitDate = getPatientLastVisitDate(patient);
 
-                    <div className="patientRowActions" aria-label={`Manage ${patient.name}`}>
-                      {manageMode ? (
-                        <>
-                          <button type="button" onClick={() => startEditingPatient(patient)}>
-                            <Pencil size={16} />
-                            <span>Modify</span>
-                          </button>
-                          <button
-                            className="deleteRowButton"
-                            type="button"
-                            onClick={() => handleDeletePatient(patient)}
-                          >
-                            <Trash2 size={16} />
-                            <span>Delete</span>
-                          </button>
-                        </>
-                      ) : (
+                  return (
+                    <article
+                      className={
+                        patient.id === selectedPatientId ? 'patientRow selected' : 'patientRow'
+                      }
+                      key={patient.id}
+                    >
+                      <button
+                        className="patientSelect"
+                        type="button"
+                        aria-pressed={patient.id === selectedPatientId}
+                        onClick={() => selectPatient(patient.id)}
+                      >
+                        <div className="patientIdentity">
+                          <span className="patientAvatar" aria-hidden="true">
+                            {getPatientInitials(patient.name)}
+                          </span>
+                          <span>
+                            <strong>{patient.name}</strong>
+                            <small>ID: {patient.id}</small>
+                            <small className="mobilePatientMeta">
+                              {formatDobWithAge(patient.dob)}
+                            </small>
+                          </span>
+                        </div>
+                        <div className="patientField" data-label="DOB">
+                          <span>{patient.dob || 'Not set'}</span>
+                          <small>
+                            {lastVisitDate === newPatientDisplayLabel
+                              ? newPatientDisplayLabel
+                              : 'Patient file'}
+                          </small>
+                        </div>
+                        <span className="patientField" data-label="Contact">
+                          {patient.contact || 'No contact'}
+                        </span>
+                        <span className="patientField" data-label="Last visit">
+                          {lastVisitDate}
+                        </span>
+                        <span className="patientField" data-label="Notes">
+                          {patient.noteCount}
+                        </span>
+                        <span className="patientField patientStatusField" data-label="Status">
+                          <span className="statusPill" data-status={currentStatus}>
+                            {currentStatus}
+                          </span>
+                        </span>
+                      </button>
+
+                      <div className="patientRowActions" aria-label={`Manage ${patient.name}`}>
                         <button type="button" onClick={() => selectPatient(patient.id)}>
                           View
                         </button>
-                      )}
-                    </div>
-                  </article>
-                ))}
+                      </div>
+                    </article>
+                  );
+                })}
               </div>
               <PaginationControls
                 disabled={patientsState === 'Loading'}
+                itemCount={filteredPatients.length}
                 label="Patients"
                 pagination={patientsPagination}
                 onPrevious={previousPatientsPage}
@@ -2399,15 +2566,38 @@ export default function App() {
             </div>
 
             <aside className="sidePanel">
-              {formMode === 'edit' ? (
+              {formMode === 'edit' || formMode === 'create' ? (
                 patientFormSection
               ) : (
-                <section className="detailCard" aria-labelledby="patient-detail-title">
-                  <div className="iconBox">
-                    <HeartPulse size={20} />
+                <section
+                  className="detailCard patientWorkspaceCard"
+                  aria-labelledby="patient-detail-title"
+                >
+                  <div className="patientFileHeader">
+                    <span className="patientAvatar patientFileAvatar" aria-hidden="true">
+                      {getPatientInitials(selectedPatient?.name)}
+                    </span>
+                    <div>
+                      <p className="eyebrow">Patient file</p>
+                      <h2 id="patient-detail-title">
+                        {selectedPatient?.name || 'Select a patient'}
+                      </h2>
+                    </div>
+                    {selectedPatientState === 'Loaded' && selectedPatient && (
+                      <div className="patientFileActions">
+                        <button type="button" onClick={() => startEditingPatient(selectedPatient)}>
+                          Edit patient
+                        </button>
+                        <button
+                          className="dangerTextButton"
+                          type="button"
+                          onClick={() => handleDeletePatient(selectedPatient)}
+                        >
+                          Archive patient
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  <p className="eyebrow">Patient file</p>
-                  <h2 id="patient-detail-title">{selectedPatient?.name || 'Select a patient'}</h2>
 
                   {selectedPatientState === 'Loading' && (
                     <p className="detailMessage">Loading patient details...</p>
@@ -2422,136 +2612,159 @@ export default function App() {
                       <dl className="detailGrid">
                         <div>
                           <dt>Date of birth</dt>
-                          <dd>{selectedPatient.dob || 'Not set'}</dd>
+                          <dd>{formatDobWithAge(selectedPatient.dob)}</dd>
                         </div>
                         <div>
                           <dt>Contact</dt>
                           <dd>{selectedPatient.contact || 'No contact'}</dd>
                         </div>
+                        <div>
+                          <dt>Patient ID</dt>
+                          <dd>{selectedPatient.id}</dd>
+                        </div>
+                        <div>
+                          <dt>Notes</dt>
+                          <dd>{selectedPatient.noteCount}</dd>
+                        </div>
                       </dl>
 
-                      <div className="recordActions">
+                      <div
+                        className="patientTabs"
+                        role="tablist"
+                        aria-label="Patient file sections"
+                      >
                         <button
+                          className={!timelineOpen ? 'selected' : ''}
                           type="button"
                           onClick={() => {
-                            setVisitsOpen((current) => !current);
                             setTimelineOpen(false);
+                            setVisitsOpen(true);
                             closeNoteForm();
                           }}
                         >
-                          {visitsOpen ? 'Hide visits' : 'View visits'}
+                          Visits
                         </button>
-                        <button type="button" onClick={toggleTimeline}>
-                          {timelineOpen ? 'Hide timeline' : 'View timeline'}
+                        <button
+                          className={timelineOpen ? 'selected' : ''}
+                          type="button"
+                          onClick={toggleTimeline}
+                        >
+                          Timeline
                         </button>
                       </div>
 
-                      {visitsOpen && (
+                      {!timelineOpen && visitsOpen && (
                         <section className="visitPanel" aria-labelledby="visit-panel-title">
                           <div className="visitPanelHeader">
                             <div>
                               <p className="eyebrow">Visits</p>
-                              <h3 id="visit-panel-title">Patient visits</h3>
+                              <h3 id="visit-panel-title">
+                                Today&apos;s visits ({formatShortDate(getTodayDateString())})
+                              </h3>
                             </div>
                             {!patientAppointmentFormOpen && (
                               <button type="button" onClick={() => startAppointmentForm('create')}>
+                                <CalendarPlus size={16} />
                                 Schedule visit
                               </button>
                             )}
                           </div>
 
-                          {!patientAppointmentFormOpen && (
-                            <div className="visitList">
-                              <div className="visitToolbar" aria-label="Visit list mode">
-                                <button
-                                  className={visitArchiveMode === 'active' ? 'selected' : ''}
-                                  type="button"
-                                  onClick={() => showVisitArchiveMode('active')}
-                                >
-                                  Active
-                                </button>
-                                <button
-                                  className={visitArchiveMode === 'archived' ? 'selected' : ''}
-                                  type="button"
-                                  onClick={() => showVisitArchiveMode('archived')}
-                                >
-                                  Archived
-                                </button>
-                              </div>
-                              <div className="visitTableHeader" aria-hidden="true">
-                                <span>Date / time</span>
-                                <span>Reason</span>
-                                <span>Type</span>
-                                <span>Status</span>
-                                <span>Actions</span>
-                              </div>
-
-                              {selectedPatientVisits.length === 0 && (
-                                <p className="visitEmptyState">
-                                  {visitArchiveMode === 'archived'
-                                    ? 'No archived visits found.'
-                                    : 'No visits found.'}
-                                </p>
-                              )}
-
-                              {selectedPatientVisits.map((visit) => {
-                                const today = getTodayDateString();
-                                const visitCategory =
-                                  visit.status === 'Completed' ||
-                                  visit.status === 'Cancelled' ||
-                                  visit.scheduledDate < today
-                                    ? 'Previous'
-                                    : 'Scheduled';
-                                const visitDateTime = visit.scheduledTime
-                                  ? `${visit.scheduledDate}T${visit.scheduledTime}`
-                                  : visit.scheduledDate;
-
-                                return (
-                                  <article className="visitRow" key={visit.id}>
-                                    <div className="visitDateCell">
-                                      <time dateTime={visitDateTime}>
-                                        {visit.scheduledDate} {visit.scheduledTime}
-                                      </time>
-                                    </div>
-                                    <strong>{visit.reason || 'No reason'}</strong>
-                                    <span>{visitCategory}</span>
-                                    <span className="statusPill">{visit.status}</span>
-                                    {visitArchiveMode === 'active' ? (
-                                      <div className="rowActions">
-                                        <button
-                                          type="button"
-                                          onClick={() => startAppointmentForm('edit', visit.id)}
-                                        >
-                                          Edit
-                                        </button>
-                                        <button
-                                          className="dangerTextButton"
-                                          disabled={archivingAppointmentId === visit.id}
-                                          type="button"
-                                          onClick={() => archiveAppointment(visit)}
-                                        >
-                                          {archivingAppointmentId === visit.id
-                                            ? 'Archiving...'
-                                            : 'Archive'}
-                                        </button>
-                                      </div>
-                                    ) : (
-                                      <span>Archived</span>
-                                    )}
-                                  </article>
-                                );
-                              })}
-                              <PaginationControls
-                                disabled={appointmentsState === 'Loading'}
-                                label="Visits"
-                                pagination={appointmentsPagination}
-                                onPrevious={previousAppointmentsPage}
-                                onNext={nextAppointmentsPage}
-                              />
+                          <div className="visitList">
+                            <div className="visitToolbar" aria-label="Visit list mode">
+                              <button
+                                className={visitArchiveMode === 'active' ? 'selected' : ''}
+                                type="button"
+                                onClick={() => showVisitArchiveMode('active')}
+                              >
+                                Active
+                              </button>
+                              <button
+                                className={visitArchiveMode === 'archived' ? 'selected' : ''}
+                                type="button"
+                                onClick={() => showVisitArchiveMode('archived')}
+                              >
+                                Archived
+                              </button>
                             </div>
-                          )}
+                            <div className="visitTableHeader" aria-hidden="true">
+                              <span>Date / time</span>
+                              <span>Reason</span>
+                              <span>Type</span>
+                              <span>Status</span>
+                              <span>Actions</span>
+                            </div>
 
-                          {patientAppointmentFormOpen && renderAppointmentForm()}
+                            {selectedPatientVisits.length === 0 && (
+                              <p className="visitEmptyState">
+                                {visitArchiveMode === 'archived'
+                                  ? 'No archived visits found.'
+                                  : 'No visits found.'}
+                              </p>
+                            )}
+
+                            {selectedPatientVisits.map((visit) => {
+                              const today = getTodayDateString();
+                              const visitCategory =
+                                visit.scheduledDate < today
+                                  ? 'Previous'
+                                  : defaultVisitStatus || 'Upcoming';
+                              const visitDateTime = visit.scheduledTime
+                                ? `${visit.scheduledDate}T${visit.scheduledTime}`
+                                : visit.scheduledDate;
+
+                              return (
+                                <article className="visitRow" key={visit.id}>
+                                  <div className="visitDateCell">
+                                    <time dateTime={visitDateTime}>
+                                      {formatVisitDateTime(
+                                        visit.scheduledDate,
+                                        visit.scheduledTime,
+                                      )}
+                                    </time>
+                                  </div>
+                                  <strong>{visit.reason || 'No reason'}</strong>
+                                  <span>{visitCategory}</span>
+                                  <span className="statusPill" data-status={visit.status}>
+                                    {visit.status}
+                                  </span>
+                                  {visitArchiveMode === 'active' ? (
+                                    <div className="rowActions">
+                                      <button type="button" onClick={() => openAppointment(visit)}>
+                                        Open
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => startAppointmentForm('edit', visit.id)}
+                                      >
+                                        Edit
+                                      </button>
+                                      <button
+                                        className="dangerTextButton"
+                                        disabled={archivingAppointmentId === visit.id}
+                                        type="button"
+                                        onClick={() => archiveAppointment(visit)}
+                                      >
+                                        {archivingAppointmentId === visit.id
+                                          ? 'Archiving...'
+                                          : 'Archive'}
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <span>Archived</span>
+                                  )}
+                                </article>
+                              );
+                            })}
+                            <PaginationControls
+                              disabled={appointmentsState === 'Loading'}
+                              itemCount={selectedPatientVisits.length}
+                              label="Visits"
+                              pagination={appointmentsPagination}
+                              onPrevious={previousAppointmentsPage}
+                              onNext={nextAppointmentsPage}
+                            />
+                          </div>
                         </section>
                       )}
 
@@ -2663,6 +2876,7 @@ export default function App() {
                               ))}
                               <PaginationControls
                                 disabled={timelineState === 'Loading'}
+                                itemCount={timeline.length}
                                 label="Timeline"
                                 pagination={timelinePagination}
                                 onPrevious={previousTimelinePage}
@@ -2676,8 +2890,6 @@ export default function App() {
                   )}
                 </section>
               )}
-
-              {formMode === 'create' && patientFormSection}
             </aside>
 
             <section className="recordsTools" aria-label="Records tools">
@@ -2750,6 +2962,7 @@ export default function App() {
                     ))}
                     <PaginationControls
                       disabled={noteSearchState === 'Loading'}
+                      itemCount={noteSearchResults.length}
                       label="Search"
                       pagination={noteSearchPagination}
                       onPrevious={previousNoteSearchPage}
@@ -2796,6 +3009,7 @@ export default function App() {
                     ))}
                     <PaginationControls
                       disabled={auditLogsState === 'Loading'}
+                      itemCount={auditLogs.length}
                       label="Audit"
                       pagination={auditLogsPagination}
                       onPrevious={previousAuditLogsPage}

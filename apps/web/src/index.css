@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Figtree:wght@600;700;800;900&family=Noto+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Figtree:wght@600;700;800;900&family=Inter:wght@400;500;600;700;800&family=Noto+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@600;700&display=swap');
 
 :root {
   --navy: #02051b;
@@ -13,6 +13,13 @@
   --section: #f5fbfe;
   --white: #ffffff;
   --shadow: 0 20px 58px rgba(2, 5, 27, 0.14);
+  --app-bg: #f8f9fb;
+  --app-panel: #f2f4f6;
+  --app-border: #bbc9cc;
+  --app-teal: #006876;
+  --app-teal-soft: rgba(0, 188, 212, 0.1);
+  --app-text: #191c1e;
+  --app-muted: #3c494c;
   --appointment-columns: minmax(76px, 0.52fr) minmax(170px, 1.05fr) minmax(170px, 1fr)
     minmax(190px, 1.2fr) minmax(110px, 0.68fr) minmax(150px, 0.85fr);
   --patient-columns: minmax(210px, 1.35fr) minmax(118px, 0.8fr) minmax(132px, 0.9fr)
@@ -226,6 +233,12 @@ button:focus-visible {
   color: var(--white);
 }
 
+.appTopBar {
+  position: relative;
+  padding-bottom: 0;
+  color: var(--ink);
+}
+
 .brand {
   display: grid;
   padding: 4px;
@@ -259,6 +272,14 @@ button:focus-visible {
   font-family: 'Noto Sans', Arial, sans-serif;
   font-size: 12px;
   font-weight: 700;
+}
+
+.appTopBar .sessionButton {
+  color: var(--ink);
+}
+
+.appTopBar .sessionButton span {
+  color: var(--ink-soft);
 }
 
 .authHeroActions {
@@ -615,6 +636,10 @@ h3 {
   padding: clamp(56px, 8vw, 96px) clamp(18px, 5vw, 72px) clamp(72px, 8vw, 112px);
 }
 
+.appDashboardShell .workspace {
+  padding-top: clamp(24px, 4vw, 48px);
+}
+
 .appointmentPanel,
 .patientPanel,
 .detailCard,
@@ -732,11 +757,6 @@ h3 {
 .toolSearchForm button:hover,
 .formActions button:hover {
   border-color: var(--cyan);
-}
-
-.appointmentSchedulePanel {
-  padding: 18px 24px;
-  border-bottom: 1px solid var(--line);
 }
 
 .appointmentList {
@@ -1110,6 +1130,7 @@ h3 {
 .appointmentInfoGrid dt,
 .appointmentReasonBlock span,
 .clinicalNotePanel label > span,
+.clinicalNoteReadOnly > span,
 .aiSummarySections dt,
 .aiSummaryEditor label {
   color: var(--muted);
@@ -1174,6 +1195,20 @@ h3 {
 .clinicalNotePanel textarea:focus {
   outline: 4px solid rgba(18, 184, 232, 0.22);
   border-color: var(--cyan);
+}
+
+.clinicalNoteReadOnly {
+  display: grid;
+  gap: 10px;
+}
+
+.clinicalNoteDisplay {
+  color: var(--ink);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .appointmentNoteActions {
@@ -1849,6 +1884,641 @@ h3 {
   min-width: 140px;
 }
 
+.doctorAppShell {
+  min-height: 100vh;
+  background: var(--app-panel);
+  font-family: 'Inter', 'Noto Sans', Arial, sans-serif;
+}
+
+.doctorAppShell .appTopBar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  height: 64px;
+  padding: 0 24px;
+  color: var(--app-text);
+  background: var(--app-bg);
+  border-bottom: 1px solid var(--app-border);
+}
+
+.appBrand {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--app-text);
+  font-weight: 800;
+  min-width: 0;
+}
+
+.clinikitMark {
+  display: block;
+  flex: 0 0 auto;
+  width: clamp(46px, 4.8vw, 58px);
+  height: auto;
+  fill: #09acd6;
+}
+
+.clinikitName {
+  color: var(--app-text);
+  font-family: 'Figtree', 'Inter', Arial, sans-serif;
+  font-size: clamp(23px, 2vw, 28px);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+}
+
+.doctorAppShell .sessionButton {
+  margin-left: auto;
+  color: var(--app-muted);
+  font-size: 14px;
+  font-weight: 500;
+  text-align: right;
+}
+
+.doctorAppShell .sessionButton span {
+  color: var(--app-text);
+  font-family: 'Inter', Arial, sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.doctorWorkspace {
+  grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
+  gap: 0;
+  min-height: calc(100vh - 64px);
+  padding: 0;
+  background: var(--app-panel);
+}
+
+.appDashboardShell .doctorWorkspace {
+  padding: 0;
+}
+
+.doctorWorkspace > .appointmentPanel,
+.doctorWorkspace > .recordsTools {
+  display: none;
+}
+
+.doctorWorkspace > .appointmentPage {
+  grid-column: 1 / -1;
+  margin: 32px;
+}
+
+.doctorWorkspace > .patientDirectory {
+  height: calc(100vh - 64px);
+  overflow: hidden;
+  background: var(--surface-container-lowest, #ffffff);
+  border-width: 0 1px 0 0;
+  border-color: var(--app-border);
+  border-radius: 0;
+}
+
+.patientDirectoryHeader {
+  align-items: center;
+  padding: 18px 16px 16px;
+  background: var(--white);
+  border-bottom: 1px solid var(--app-border);
+}
+
+.patientDirectoryHeader h2 {
+  color: var(--app-text);
+  font-size: 20px;
+  letter-spacing: 0;
+}
+
+.patientDirectoryHeader p {
+  margin: 2px 0 0;
+  color: var(--app-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.patientDirectoryHeader .panelActions button {
+  min-height: 36px;
+  color: var(--white);
+  background: var(--app-teal);
+  border-color: var(--app-teal);
+  border-radius: 2px;
+  font-size: 14px;
+}
+
+.directorySearch {
+  position: relative;
+  display: block;
+  padding: 12px 16px;
+  background: var(--white);
+  border-bottom: 1px solid var(--app-border);
+}
+
+.directorySearch svg {
+  position: absolute;
+  top: 50%;
+  left: 30px;
+  width: 18px;
+  height: 18px;
+  color: #6b7280;
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.directorySearch input {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 14px 0 42px;
+  background: #f8fafc;
+  border-color: var(--app-border);
+  border-radius: 6px;
+}
+
+.patientDirectory .patientList {
+  align-content: start;
+  height: calc(100% - 152px);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.patientDirectory .patientTableHeader {
+  display: none;
+}
+
+.patientDirectory .patientRow {
+  position: relative;
+  display: block;
+  min-width: 0;
+  background: var(--white);
+  border-bottom: 1px solid #e0e3e5;
+}
+
+.patientDirectory .patientRow.selected {
+  background: var(--app-panel);
+  border-left: 4px solid var(--app-teal);
+}
+
+.patientDirectory .patientSelect {
+  grid-template-columns: 1fr;
+  width: 100%;
+  min-width: 0;
+  min-height: 72px;
+  padding: 16px;
+  padding-right: 104px;
+}
+
+.patientDirectory .patientIdentity {
+  gap: 12px;
+}
+
+.patientDirectory .patientAvatar {
+  width: 40px;
+  height: 40px;
+  color: var(--app-teal) !important;
+  background: rgba(0, 188, 212, 0.16);
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  font-size: 12px !important;
+}
+
+.patientDirectory .patientIdentity strong {
+  color: var(--app-text);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.patientDirectory .patientIdentity small {
+  color: #6c797c;
+  font-family: 'Inter', Arial, sans-serif;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+.patientDirectory .patientField {
+  display: none;
+}
+
+.patientDirectory .patientField[data-label='Last visit'] {
+  position: absolute;
+  top: 16px;
+  right: 14px;
+  display: block;
+  color: var(--app-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.patientDirectory .patientStatusField {
+  position: absolute;
+  right: 14px;
+  bottom: 16px;
+  display: block;
+}
+
+.patientDirectory .patientRowActions {
+  display: none;
+}
+
+.patientDirectory .paginationBar {
+  position: sticky;
+  bottom: 0;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: var(--app-bg);
+}
+
+.doctorWorkspace > .sidePanel {
+  min-width: 0;
+  height: calc(100vh - 64px);
+  padding: 32px;
+  overflow: auto;
+  background: var(--app-panel);
+}
+
+.patientWorkspaceCard,
+.patientEditCard {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  background: var(--white);
+  border-color: var(--app-border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(25, 28, 30, 0.04);
+}
+
+.patientFileHeader {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--app-border);
+}
+
+.patientFileAvatar,
+.patientEditAvatar {
+  width: 64px;
+  height: 64px;
+  color: var(--app-teal) !important;
+  background: var(--app-teal-soft);
+  border: 2px solid #00bcd4;
+  border-radius: 12px;
+  font-size: 18px !important;
+}
+
+.patientFileHeader .eyebrow {
+  color: #6c797c;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
+.patientFileHeader h2,
+.patientEditHeader h2 {
+  color: var(--app-text);
+  font-size: 32px;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.patientFileActions {
+  display: flex;
+  gap: 8px;
+}
+
+.patientFileActions button {
+  min-height: 40px;
+  padding: 0 16px;
+  color: var(--app-text);
+  background: var(--cyan-faint);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.patientFileActions button:hover {
+  border-color: var(--cyan);
+}
+
+.patientWorkspaceCard .detailGrid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.patientWorkspaceCard .detailGrid div {
+  min-height: auto;
+  padding: 0;
+  border: 0;
+}
+
+.patientWorkspaceCard .detailGrid dt {
+  color: #6c797c;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+.patientWorkspaceCard .detailGrid dd {
+  color: var(--app-muted);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.patientTabs {
+  display: flex;
+  gap: 22px;
+  margin: 24px -24px 0;
+  padding: 0 24px;
+  border-top: 1px solid var(--app-border);
+  border-bottom: 1px solid var(--app-border);
+}
+
+.patientTabs button {
+  min-height: 42px;
+  padding: 0;
+  color: var(--app-muted);
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.patientTabs button.selected {
+  color: var(--app-teal);
+  border-bottom-color: var(--app-teal);
+}
+
+.patientWorkspaceCard .visitPanel,
+.patientWorkspaceCard .timelinePanel {
+  margin-top: 20px;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.patientWorkspaceCard .visitPanelHeader,
+.patientWorkspaceCard .timelineHeader {
+  align-items: center;
+}
+
+.patientWorkspaceCard .visitPanelHeader h3,
+.patientWorkspaceCard .timelineHeader h3 {
+  color: var(--app-text);
+  font-size: 22px;
+}
+
+.patientWorkspaceCard .visitPanelHeader button,
+.patientWorkspaceCard .timelineHeader button {
+  color: var(--white);
+  background: var(--app-teal);
+  border-color: var(--app-teal);
+  border-radius: 2px;
+}
+
+.patientWorkspaceCard .visitList,
+.patientWorkspaceCard .timelineList {
+  gap: 12px;
+  overflow: visible;
+  border: 0;
+}
+
+.patientWorkspaceCard .visitToolbar {
+  min-width: 0;
+  width: 100%;
+  padding: 0;
+  background: transparent;
+  border: 0;
+}
+
+.patientWorkspaceCard .visitTableHeader {
+  display: none;
+}
+
+.patientWorkspaceCard .visitRow {
+  grid-template-columns:
+    minmax(150px, 0.85fr) minmax(220px, 1.35fr) minmax(96px, 0.55fr)
+    minmax(116px, 0.65fr) minmax(210px, 1fr);
+  min-width: 0;
+  width: 100%;
+  padding: 16px 18px;
+  background: var(--white);
+  border: 1px solid var(--app-border);
+  border-radius: 4px;
+}
+
+.patientWorkspaceCard .visitRow strong {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.patientWorkspaceCard .visitEmptyState {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--app-border);
+  border-radius: 4px;
+}
+
+.patientWorkspaceCard .rowActions {
+  gap: 6px;
+}
+
+.patientWorkspaceCard .rowActions button {
+  min-height: 34px;
+  padding: 0 10px;
+  font-size: 12px;
+  border-radius: 4px;
+}
+
+.patientEditCard {
+  width: min(100%, 780px);
+  padding: 24px;
+}
+
+.patientEditHeader {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--app-border);
+}
+
+.patientEditHeader p {
+  margin: 2px 0 0;
+  color: var(--app-muted);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.patientEditForm {
+  grid-template-columns: 1fr;
+  gap: 18px;
+}
+
+.patientEditForm label {
+  color: var(--app-muted);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
+
+.patientEditForm input {
+  min-height: 40px;
+  border-color: var(--app-border);
+  border-radius: 4px;
+}
+
+.patientEditForm input[readonly] {
+  color: var(--app-muted);
+  background: var(--app-panel);
+}
+
+.patientEditForm .formActions {
+  padding-top: 18px;
+  border-top: 1px solid var(--app-border);
+}
+
+.scheduleOverlay {
+  z-index: 45;
+  background: rgba(25, 28, 30, 0.42);
+  backdrop-filter: blur(2px);
+}
+
+.scheduleModal {
+  width: min(672px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  background: var(--white);
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  box-shadow:
+    0 10px 15px -3px rgba(0, 0, 0, 0.1),
+    0 4px 6px -4px rgba(0, 0, 0, 0.1);
+}
+
+.scheduleModalHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 24px;
+  background: var(--app-bg);
+  border-bottom: 1px solid var(--app-border);
+}
+
+.scheduleModalHeader h2 {
+  color: var(--app-text);
+  font-size: 24px;
+  letter-spacing: -0.01em;
+}
+
+.scheduleModalHeader p {
+  margin: 4px 0 0;
+  color: var(--app-muted);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.scheduleModalHeader button {
+  display: inline-grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  color: var(--app-muted);
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+}
+
+.scheduleModal .visitForm {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px 28px;
+  margin: 0;
+  padding: 24px;
+}
+
+.scheduleModal .visitForm label {
+  color: var(--app-text);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+.scheduleModal .visitForm input,
+.scheduleModal .visitForm select,
+.scheduleModal .visitForm textarea {
+  border-color: var(--app-border);
+  border-radius: 4px;
+}
+
+.visitForm textarea {
+  width: 100%;
+  min-height: 116px;
+  padding: 12px;
+  color: var(--ink);
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  resize: vertical;
+}
+
+.scheduleModal .formActions {
+  margin: 6px -24px -24px;
+  padding: 16px 24px;
+  background: var(--app-panel);
+  border-top: 1px solid var(--app-border);
+}
+
+.scheduleModal .primaryButton,
+.doctorAppShell .primaryButton {
+  background: var(--app-teal);
+  border-color: var(--app-teal);
+  border-radius: 4px;
+}
+
+.statusPill[data-status='Doctor review'] {
+  color: #6b21a8 !important;
+  background: #f3e8ff;
+  border-color: #e9d5ff;
+}
+
+.statusPill[data-status='Checked in'] {
+  color: #854d0e !important;
+  background: #fef9c3;
+  border-color: #fde68a;
+}
+
+.statusPill[data-status='Needs vitals'] {
+  color: #9a3412 !important;
+  background: #ffedd5;
+  border-color: #fed7aa;
+}
+
+.statusPill[data-status='Completed'] {
+  color: #166534 !important;
+  background: #dcfce7;
+  border-color: #bbf7d0;
+}
+
+.statusPill[data-status='Scheduled'] {
+  color: #1e40af !important;
+  background: #dbeafe;
+  border-color: #bfdbfe;
+}
+
+.statusPill[data-status='Cancelled'] {
+  color: #475569 !important;
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.statusPill[data-status='New patient'] {
+  color: #075985 !important;
+  background: #e0f2fe;
+  border-color: #bae6fd;
+}
+
 @media (max-width: 980px) {
   .workspace {
     grid-template-columns: 1fr;
@@ -2290,6 +2960,385 @@ h3 {
 
   .panelActions button {
     flex: 1 1 140px;
+  }
+}
+
+@media (max-width: 980px) {
+  .doctorWorkspace {
+    grid-template-columns: 1fr;
+  }
+
+  .doctorWorkspace > .patientDirectory,
+  .doctorWorkspace > .sidePanel {
+    height: auto;
+  }
+
+  .doctorWorkspace > .patientDirectory {
+    border-width: 0 0 1px;
+  }
+
+  .patientDirectory .patientList {
+    max-height: 360px;
+  }
+
+  .doctorWorkspace > .sidePanel {
+    padding: 20px;
+  }
+
+  .patientWorkspaceCard .detailGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .patientWorkspaceCard .visitRow {
+    grid-template-columns: minmax(120px, 0.8fr) minmax(180px, 1.2fr) minmax(88px, 0.6fr) minmax(
+        108px,
+        0.7fr
+      );
+  }
+
+  .patientWorkspaceCard .visitRow .rowActions {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 720px) {
+  .doctorAppShell .appTopBar {
+    height: auto;
+    min-height: 64px;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 12px 16px;
+  }
+
+  .appBrand {
+    font-size: 17px;
+  }
+
+  .doctorAppShell .sessionButton {
+    margin-left: auto;
+  }
+
+  .doctorWorkspace {
+    min-height: auto;
+  }
+
+  .patientDirectory .patientSelect {
+    padding-right: 16px;
+  }
+
+  .patientDirectory .patientField[data-label='Last visit'],
+  .patientDirectory .patientStatusField {
+    position: static;
+    margin: 8px 0 0 52px;
+  }
+
+  .patientFileHeader {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .patientFileActions {
+    grid-column: 1 / -1;
+    flex-wrap: wrap;
+  }
+
+  .patientFileActions button {
+    flex: 1 1 160px;
+  }
+
+  .patientWorkspaceCard .detailGrid,
+  .scheduleModal .visitForm {
+    grid-template-columns: 1fr;
+  }
+
+  .patientTabs {
+    margin-right: -18px;
+    margin-left: -18px;
+    padding-right: 18px;
+    padding-left: 18px;
+  }
+
+  .patientWorkspaceCard .visitPanelHeader,
+  .patientWorkspaceCard .timelineHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .patientWorkspaceCard .visitRow {
+    grid-template-columns: 1fr;
+  }
+
+  .scheduleModalHeader {
+    padding: 16px;
+  }
+
+  .scheduleModal .visitForm {
+    padding: 18px;
+  }
+
+  .scheduleModal .formActions {
+    margin: 0 -18px -18px;
+    padding: 14px 18px;
+  }
+}
+
+@media (max-width: 1240px) {
+  .doctorWorkspace {
+    grid-template-columns: 1fr;
+    min-height: auto;
+  }
+
+  .doctorWorkspace > .patientDirectory,
+  .doctorWorkspace > .sidePanel {
+    height: auto;
+  }
+
+  .doctorWorkspace > .patientDirectory {
+    border-width: 0 0 1px;
+  }
+
+  .patientDirectory .patientList {
+    height: auto;
+    max-height: min(430px, 52vh);
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .patientDirectory .paginationBar {
+    position: static;
+  }
+
+  .doctorWorkspace > .sidePanel {
+    padding: clamp(18px, 3vw, 30px);
+  }
+
+  .patientWorkspaceCard,
+  .patientEditCard {
+    max-width: none;
+  }
+}
+
+.doctorAppShell .appTopBar {
+  gap: clamp(14px, 3vw, 36px);
+  padding-right: clamp(16px, 5vw, 64px);
+  padding-left: clamp(16px, 5vw, 64px);
+}
+
+.appBrand {
+  flex: 0 1 auto;
+}
+
+.doctorAppShell .sessionButton {
+  flex: 0 0 auto;
+}
+
+.patientDirectory .patientSelect {
+  min-width: 0;
+}
+
+.patientDirectory .patientIdentity > span,
+.patientFileHeader > div,
+.patientEditHeader > div {
+  min-width: 0;
+}
+
+.patientDirectory .patientIdentity strong,
+.patientFileHeader h2,
+.patientEditHeader h2 {
+  overflow-wrap: anywhere;
+}
+
+.patientFileActions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.patientWorkspaceCard .visitList,
+.patientWorkspaceCard .timelineList {
+  display: block;
+  gap: 0;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: 1px solid var(--app-border);
+  border-radius: 4px;
+}
+
+.patientWorkspaceCard .visitToolbar {
+  min-width: 720px;
+  padding: 10px 14px;
+  background: var(--white);
+  border-bottom: 1px solid var(--app-border);
+}
+
+.patientWorkspaceCard .visitTableHeader,
+.patientWorkspaceCard .timelineTableHeader {
+  display: grid;
+  gap: 12px;
+  min-width: 720px;
+  padding: 10px 14px;
+  background: #e7ecf6;
+  border-bottom: 1px solid var(--app-border);
+}
+
+.patientWorkspaceCard .visitTableHeader,
+.patientWorkspaceCard .visitRow {
+  grid-template-columns:
+    minmax(136px, 0.9fr) minmax(190px, 1.3fr) minmax(92px, 0.6fr) minmax(112px, 0.75fr)
+    minmax(146px, 0.95fr);
+}
+
+.patientWorkspaceCard .timelineTableHeader,
+.patientWorkspaceCard .timelineItem {
+  grid-template-columns:
+    minmax(132px, 0.85fr) minmax(96px, 0.6fr) minmax(220px, 1.45fr)
+    minmax(128px, 0.75fr);
+}
+
+.patientWorkspaceCard .visitRow,
+.patientWorkspaceCard .timelineItem {
+  gap: 12px;
+  min-width: 720px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 0;
+  border-bottom: 1px solid var(--app-border);
+  border-radius: 0;
+}
+
+.patientWorkspaceCard .visitRow:last-child,
+.patientWorkspaceCard .timelineItem:last-child {
+  border-bottom: 0;
+}
+
+.patientWorkspaceCard .visitRow .rowActions {
+  grid-column: auto;
+  justify-content: flex-end;
+  width: auto;
+}
+
+.patientWorkspaceCard .visitList .paginationBar,
+.patientWorkspaceCard .timelineList .paginationBar {
+  min-width: 720px;
+  align-items: center;
+  flex-direction: row;
+  padding: 12px 14px;
+}
+
+.patientWorkspaceCard .visitEmptyState {
+  min-width: 720px;
+  border: 0;
+  border-bottom: 1px solid var(--app-border);
+  border-radius: 0;
+}
+
+@media (max-width: 860px) {
+  .doctorAppShell .appTopBar {
+    display: flex;
+    flex-wrap: nowrap;
+    height: 64px;
+    min-height: 64px;
+    align-items: center;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+
+  .clinikitMark {
+    width: clamp(40px, 9vw, 50px);
+  }
+
+  .clinikitName {
+    font-size: clamp(22px, 5vw, 26px);
+  }
+
+  .doctorAppShell .sessionButton {
+    margin-left: auto;
+    text-align: right;
+    align-items: flex-end;
+  }
+}
+
+@media (max-width: 640px) {
+  .patientDirectoryHeader {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .patientDirectoryHeader .panelActions,
+  .patientDirectoryHeader .panelActions button {
+    width: 100%;
+  }
+
+  .patientDirectory .patientList {
+    max-height: min(460px, 58vh);
+  }
+
+  .patientDirectory .patientSelect {
+    padding: 14px 16px;
+  }
+
+  .patientDirectory .patientField[data-label='Last visit'],
+  .patientDirectory .patientStatusField {
+    position: static;
+    margin: 8px 0 0 52px;
+  }
+
+  .patientFileHeader {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .patientFileAvatar,
+  .patientEditAvatar {
+    width: 54px;
+    height: 54px;
+  }
+
+  .patientFileHeader h2,
+  .patientEditHeader h2 {
+    font-size: clamp(24px, 9vw, 30px);
+  }
+
+  .patientFileActions {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .patientFileActions button {
+    flex: 1 1 150px;
+  }
+
+  .doctorWorkspace > .sidePanel {
+    padding: 14px;
+  }
+
+  .detailCard,
+  .formCard,
+  .patientEditCard {
+    padding: 18px;
+  }
+}
+
+@media (max-width: 430px) {
+  .doctorAppShell .appTopBar {
+    display: flex;
+    gap: 8px;
+  }
+
+  .clinikitMark {
+    width: 38px;
+  }
+
+  .clinikitName {
+    font-size: 21px;
+  }
+
+  .doctorAppShell .sessionButton {
+    margin-left: auto;
+    align-items: flex-end;
+    text-align: right;
   }
 }
 

@@ -4,7 +4,7 @@ Clinic AI Copilot is a doctor-facing clinic workspace built as a staged training
 
 ## Current Stage
 
-Current stage: Stage 9 complete - note search and audit history.
+Current stage: Stage 9 complete - note search, audit history, and doctor-reviewed AI summaries. Stage 10, Docker/deployment, is next.
 
 Implemented:
 
@@ -16,15 +16,19 @@ Implemented:
 - Appointment scheduling from today's appointment panel and patient visit history
 - Visits, notes, and patient timeline views with archive behavior
 - Appointment workspace with doctor note entry and AI draft summary review
+- Backend-owned visit status list exposed through `GET /api/statuses`
+- Patient list status and last visit date computed from appointment records
 - MongoDB text search over active notes
 - Recent audit log viewer
-- Pagination for patients, visits, notes, and timeline endpoints
+- Pagination for patients, appointments, visits, notes, timeline, note search, and audit log
 
 Not yet implemented:
 
 - Semantic search
 - Production deployment pipeline
 - Full role-based access control beyond the doctor role
+- Forgot/reset password flow
+- Production auth hardening such as rate limiting and httpOnly cookie sessions
 
 ## Stack
 
@@ -62,7 +66,8 @@ MONGO_URL=your_mongodb_atlas_connection_string
 JWT_SECRET=your_local_secret
 CORS_ORIGINS=http://localhost:3000
 DEMO_DOCTOR_EMAIL=doctor@clinikit.local
-DEMO_DOCTOR_PASSWORD=change-this-locally
+DEMO_DOCTOR_NAME=Demo Doctor
+DEMO_DOCTOR_PASSWORD=replace_with_demo_password
 ```
 
 Frontend:
@@ -135,4 +140,7 @@ yarn web:build
 - MongoDB Atlas is the shared development database path for this project.
 - Patient delete currently archives patient records and related visits/notes instead of hard-deleting them.
 - `noteCount` is calculated from notes by the API and is not editable in the patient form.
+- Patient directory status comes from appointment records. `New patient` is a display label only when no visits exist.
+- Visit statuses come from the API status endpoint, not a duplicated frontend list.
 - AI summaries are drafts until a doctor accepts or rejects them. Editing the original note invalidates prior summaries.
+- Ollama must be running locally for AI summary generation.

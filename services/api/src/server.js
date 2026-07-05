@@ -18,7 +18,7 @@ import { Appointment } from './models/Appointment.js';
 import { Doctor } from './models/Doctor.js';
 import { Note } from './models/Note.js';
 import { Patient } from './models/Patient.js';
-import { visitStatuses } from './statuses.js';
+import { visitStatus, visitStatuses } from './statuses.js';
 
 const app = express();
 const port = process.env.API_PORT || 3001;
@@ -283,11 +283,55 @@ function cleanAiSummarySections(input = {}) {
   const cleaned = {};
 
   for (const field of Object.keys(aiSummaryFieldMaxLengths)) {
-    cleaned[field] = String(input[field] ?? '').trim();
+    cleaned[field] = normalizeAiSummaryValue(input[field]);
   }
 
   validateMaxLengths(cleaned, aiSummaryFieldMaxLengths);
   return cleaned;
+}
+
+function normalizeAiSummaryValue(value) {
+  if (value === null || value === undefined) return '';
+
+  if (typeof value === 'string') return value.trim();
+
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value).trim();
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(normalizeAiSummaryValue).filter(Boolean).join('; ');
+  }
+
+  if (typeof value === 'object') {
+    const preferredKeys = ['text', 'value', 'summary', 'description', 'symptom', 'item'];
+
+    for (const key of preferredKeys) {
+      if (Object.hasOwn(value, key)) {
+        const normalized = normalizeAiSummaryValue(value[key]);
+        if (normalized) return normalized;
+      }
+    }
+
+    return Object.entries(value)
+      .map(([key, nestedValue]) => {
+        const normalized = normalizeAiSummaryValue(nestedValue);
+        if (!normalized) return '';
+
+        const label = /^\d+$/.test(key)
+          ? ''
+          : key
+              .replace(/([a-z])([A-Z])/g, '$1 $2')
+              .replace(/[_-]+/g, ' ')
+              .trim();
+
+        return label ? `${label}: ${normalized}` : normalized;
+      })
+      .filter(Boolean)
+      .join('; ');
+  }
+
+  return '';
 }
 
 function combineAiSummarySections(summary) {
@@ -348,6 +392,7 @@ function buildAiSummaryPrompt({ appointment, note, patient }) {
     'You are assisting a doctor by drafting a concise clinical note summary.',
     'Use only the provided information. Do not invent diagnoses, medications, or follow-up steps.',
     'Return only valid JSON with these exact keys: shortSummary, keySymptoms, assessment, plan.',
+    'Each JSON value must be a plain string, not an array or object.',
     'If a section is not documented, write "Not documented." for that value.',
     '',
     'Patient context:',
@@ -484,6 +529,88 @@ async function buildAppointmentResponses(appointments, doctorId) {
   }));
 }
 
+function getMostRelevantVisit(visits, today) {
+  const todayVisits = visits
+    .filter((visit) => visit.scheduledDate === today)
+    .sort((a, b) => {
+      const timeComparison = (b.scheduledTime || '').localeCompare(a.scheduledTime || '');
+      return timeComparison || b.id.localeCompare(a.id);
+    });
+
+  if (todayVisits[0]) {
+    return {
+      currentStatus: todayVisits[0].status || visitStatus.scheduled,
+    };
+  }
+
+  const futureVisits = visits.filter((visit) => visit.scheduledDate > today);
+  if (futureVisits.length > 0) {
+    return {
+      currentStatus: visitStatus.scheduled,
+    };
+  }
+
+  const latestPastVisit = visits
+    .filter((visit) => visit.scheduledDate <= today)
+    .sort((a, b) => {
+      const dateComparison = b.scheduledDate.localeCompare(a.scheduledDate);
+      const timeComparison = (b.scheduledTime || '').localeCompare(a.scheduledTime || '');
+      return dateComparison || timeComparison || b.id.localeCompare(a.id);
+    })[0];
+
+  return {
+    currentStatus: latestPastVisit?.status || null,
+  };
+}
+
+function getLastVisitDate(visits, today) {
+  const latestPastVisit = visits
+    .filter((visit) => visit.scheduledDate <= today)
+    .sort((a, b) => {
+      const dateComparison = b.scheduledDate.localeCompare(a.scheduledDate);
+      const timeComparison = (b.scheduledTime || '').localeCompare(a.scheduledTime || '');
+      return dateComparison || timeComparison || b.id.localeCompare(a.id);
+    })[0];
+
+  return latestPastVisit?.scheduledDate || null;
+}
+
+async function buildPatientListResponses(patients, doctorId) {
+  const patientIds = [...new Set(patients.map((patient) => patient.id))];
+
+  if (patientIds.length === 0) return [];
+
+  const visits = await Appointment.find({
+    doctorId,
+    patientId: { $in: patientIds },
+    archivedAt: null,
+  })
+    .select(appointmentPublicFields)
+    .sort({ patientId: 1, scheduledDate: -1, scheduledTime: -1, id: 1 })
+    .lean();
+
+  const today = getTodayDateString();
+  const visitsByPatientId = new Map();
+
+  for (const visit of visits) {
+    const patientVisits = visitsByPatientId.get(visit.patientId) || [];
+    patientVisits.push(visit);
+    visitsByPatientId.set(visit.patientId, patientVisits);
+  }
+
+  return patients.map((patient) => {
+    const patientVisits = visitsByPatientId.get(patient.id) || [];
+    const { currentStatus } = getMostRelevantVisit(patientVisits, today);
+    const lastVisitDate = getLastVisitDate(patientVisits, today);
+
+    return {
+      ...patient,
+      currentStatus,
+      lastVisitDate,
+    };
+  });
+}
+
 async function buildNoteSearchResponses(notes, doctorId) {
   const patientIds = [...new Set(notes.map((note) => note.patientId).filter(Boolean))];
   const appointmentIds = [...new Set(notes.map((note) => note.appointmentId).filter(Boolean))];
@@ -560,7 +687,7 @@ async function upsertTodayAppointmentForPatient(doctorId, patient) {
       $set: {
         scheduledTime: patient.appointment || '',
         reason: patient.reason || '',
-        status: patient.status || 'Scheduled',
+        status: patient.status || visitStatus.scheduled,
       },
       $setOnInsert: {
         doctorId,
@@ -580,7 +707,7 @@ async function syncPatientVisitFields(doctorId, appointment) {
       $set: {
         appointment: appointment.scheduledTime || '',
         reason: appointment.reason || '',
-        status: appointment.status || 'Scheduled',
+        status: appointment.status || visitStatus.scheduled,
       },
     },
   );
@@ -602,7 +729,7 @@ async function refreshPatientVisitFields(doctorId, patientId) {
       $set: {
         appointment: latestAppointment?.scheduledTime || '',
         reason: latestAppointment?.reason || '',
-        status: latestAppointment?.status || 'Scheduled',
+        status: latestAppointment?.status || visitStatus.scheduled,
       },
     },
   );
@@ -708,6 +835,10 @@ app.get('/api/auth/me', (req, res) => {
   res.json({ doctor: publicDoctor(req.doctor) });
 });
 
+app.get('/api/statuses', (req, res) => {
+  res.json({ visitStatuses });
+});
+
 // Patient records stored in MongoDB Atlas.
 app.get('/api/patients', async (req, res) => {
   try {
@@ -723,7 +854,11 @@ app.get('/api/patients', async (req, res) => {
       ...pagination,
       hasNextPage: patients.length > pagination.limit,
     });
-    res.json(patients.slice(0, pagination.limit));
+    const response = await buildPatientListResponses(
+      patients.slice(0, pagination.limit),
+      req.doctor.id,
+    );
+    res.json(response);
   } catch (error) {
     logApiError('patients.list_failed', error);
     res.status(500).json({ error: 'Failed to load patients' });
@@ -809,7 +944,7 @@ app.post('/api/appointments', async (req, res) => {
       scheduledDate: getTodayDateString(),
       scheduledTime: '',
       reason: '',
-      status: 'Scheduled',
+      status: visitStatus.scheduled,
       ...payload,
       doctorId: req.doctor.id,
       id: createAppointmentId(),

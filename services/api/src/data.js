@@ -1,5 +1,7 @@
 // Starter data for shared development. Seed this into MongoDB; the API reads from the database.
 
+import { visitStatus } from './statuses.js';
+
 function getTodayDateString() {
   const now = new Date();
   const localDate = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
@@ -14,9 +16,7 @@ export const seedPatients = [
     contact: '+961 70 102 400',
     reason: 'Follow-up consultation',
     appointment: '08:40',
-    status: 'Checked in',
-    lastVisit: '2026-06-12',
-    noteCount: 4,
+    status: visitStatus.checkedIn,
   },
   {
     id: 'P-1025',
@@ -25,9 +25,7 @@ export const seedPatients = [
     contact: '+961 71 204 510',
     reason: 'New patient intake',
     appointment: '09:05',
-    status: 'Needs vitals',
-    lastVisit: 'New patient',
-    noteCount: 0,
+    status: visitStatus.needsVitals,
   },
   {
     id: 'P-1026',
@@ -36,9 +34,7 @@ export const seedPatients = [
     contact: '+961 76 889 120',
     reason: 'Chest discomfort note',
     appointment: '09:25',
-    status: 'Doctor review',
-    lastVisit: '2026-05-29',
-    noteCount: 7,
+    status: visitStatus.doctorReview,
   },
   {
     id: 'P-1027',
@@ -47,9 +43,7 @@ export const seedPatients = [
     contact: '+961 71 665 965',
     reason: 'Internship Assistance',
     appointment: '10:30',
-    status: 'Checked in',
-    lastVisit: '2026-06-27',
-    noteCount: 1,
+    status: visitStatus.checkedIn,
   },
 ];
 

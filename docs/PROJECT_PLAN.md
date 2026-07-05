@@ -38,7 +38,7 @@ reviewed summary is saved with the original doctor note.
 
 | #   | Feature               | Summary                                                      | Status    |
 | --- | --------------------- | ------------------------------------------------------------ | --------- |
-| 1   | Doctor dashboard      | Today's appointments, scheduling, and open appointment       | Partial   |
+| 1   | Doctor dashboard      | Today's appointments, scheduling, and open appointment       | Completed |
 | 2   | Patient management    | List / open / create / edit / archive patients               | Completed |
 | 3   | Appointments (visits) | Patient visit history, scheduling, editing, archive behavior | Completed |
 | 4   | Medical notes         | Attached to a visit or standalone on a patient               | Completed |
@@ -51,10 +51,9 @@ reviewed summary is saved with the original doctor note.
 
 ### Feature detail notes
 
-- **Dashboard (Partial):** UI shell, live `/api/health` status, today's
-  appointment list, appointment scheduling, patient information, visit status,
-  and an `Open appointment` action exist. The list depends on appointments dated
-  today.
+- **Dashboard (Completed):** today's appointment list, appointment scheduling,
+  patient information, visit status, and an `Open appointment` action exist.
+  The list depends on appointments dated today.
 - **Patient management (Completed):** list/get/create/edit/archive exists for each
   authenticated doctor, backed by MongoDB Atlas.
 - **Appointments (Completed):** appointment model, patient visit history,
@@ -71,7 +70,10 @@ reviewed summary is saved with the original doctor note.
   appointment, note, timeline, and audit routes are scoped to the authenticated
   doctor. The seed script creates a demo doctor for existing starter data.
 - **Visit statuses:** `Scheduled` -> `Checked in` -> `Needs vitals` ->
-  `Doctor review` -> `Completed` -> `Cancelled`.
+  `Doctor review` -> `Completed` -> `Cancelled`. The backend enum in
+  `services/api/src/statuses.js` is the source of truth and is exposed to the
+  frontend through `GET /api/statuses`. `New patient` is a display-only label
+  when a patient has no visits.
 - **Notes:** a note may link to a visit (`appointmentId`) or be standalone
   (`appointmentId = null`).
 - **Appointment workspace:** opening an appointment shows patient context at the
@@ -87,8 +89,8 @@ reviewed summary is saved with the original doctor note.
 Every collection is owned by `doctorId`.
 
 - **Doctor** - name, email, passwordHash
-- **Patient** - doctorId, name, dob, contact, visit summary fields, noteCount,
-  archivedAt
+- **Patient** - doctorId, name, dob, contact, noteCount, archivedAt. The patient
+  list adds computed `currentStatus` and `lastVisitDate` from appointments.
 - **Appointment (Visit)** - doctorId, patientId, scheduledDate, scheduledTime,
   reason, status, archivedAt
 - **Note** - doctorId, patientId, appointmentId (nullable = standalone), text,
@@ -108,7 +110,9 @@ Current (JWT-protected unless noted):
 - `POST /api/auth/register` - create a doctor account and return a JWT
 - `POST /api/auth/login` - sign in a doctor and return a JWT
 - `GET /api/auth/me` - return the authenticated doctor
-- `GET /api/patients` - list this doctor's active patients from MongoDB Atlas
+- `GET /api/statuses` - return visit statuses from the backend source of truth
+- `GET /api/patients` - paginated list of this doctor's active patients with
+  computed `currentStatus` and `lastVisitDate`
 - `GET /api/patients/:id` - single active patient scoped to this doctor
 - `POST /api/patients` - create a patient for this doctor
 - `PATCH /api/patients/:id` - update this doctor's patient
@@ -127,6 +131,9 @@ Current (JWT-protected unless noted):
 - `PATCH /api/summaries/:id` - approve/reject an AI summary
 - `GET /api/audit-logs` - paginated recent audit events
 - `GET /api/patients/:id/timeline` - merged visits + notes for one patient
+
+Paginated list endpoints accept `page` and `limit` query parameters. The
+frontend hides pagination controls when a list is empty or has only one page.
 
 Planned:
 
@@ -160,3 +167,6 @@ Planned:
 - Ollama must be running locally and the configured model must be installed for
   AI draft generation to work.
 - Semantic search is not built yet.
+- Forgot/reset password is not built yet.
+- Auth is development-ready but not production hardened with rate limiting or
+  httpOnly cookie sessions yet.

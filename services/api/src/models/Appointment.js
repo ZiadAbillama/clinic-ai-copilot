@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { visitStatuses } from '../statuses.js';
+import { visitStatus, visitStatuses } from '../statuses.js';
 
 function getTodayDateString() {
   const now = new Date();
@@ -38,7 +38,7 @@ const appointmentSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      default: 'Scheduled',
+      default: visitStatus.scheduled,
       enum: visitStatuses,
     },
     archivedAt: {

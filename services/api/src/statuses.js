@@ -1,8 +1,10 @@
-export const visitStatuses = Object.freeze([
-  'Scheduled',
-  'Checked in',
-  'Needs vitals',
-  'Doctor review',
-  'Completed',
-  'Cancelled',
-]);
+export const visitStatus = Object.freeze({
+  scheduled: 'Scheduled',
+  checkedIn: 'Checked in',
+  needsVitals: 'Needs vitals',
+  doctorReview: 'Doctor review',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
+});
+
+export const visitStatuses = Object.freeze(Object.values(visitStatus));

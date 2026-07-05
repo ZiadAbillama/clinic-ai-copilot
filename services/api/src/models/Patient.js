@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { visitStatuses } from '../statuses.js';
+import { visitStatus, visitStatuses } from '../statuses.js';
 
 const patientSchema = new mongoose.Schema(
   {
@@ -35,7 +35,7 @@ const patientSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      default: 'Scheduled',
+      default: visitStatus.scheduled,
       enum: visitStatuses,
     },
     lastVisit: {
