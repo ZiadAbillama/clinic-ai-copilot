@@ -750,7 +750,7 @@ app.use(
 );
 app.use(express.json());
 
-// API health endpoint.
+// Public health check for Docker, Render, and quick staging verification.
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
@@ -829,6 +829,7 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+// All clinical routes below require a valid doctor JWT and scope data by doctorId.
 app.use('/api', requireAuth);
 
 app.get('/api/auth/me', (req, res) => {
@@ -839,7 +840,7 @@ app.get('/api/statuses', (req, res) => {
   res.json({ visitStatuses });
 });
 
-// Patient records stored in MongoDB Atlas.
+// Patient list rows include appointment-derived status and last visit display data.
 app.get('/api/patients', async (req, res) => {
   try {
     const pagination = getPagination(req.query);

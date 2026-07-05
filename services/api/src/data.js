@@ -1,4 +1,4 @@
-// Starter data for shared development. Seed this into MongoDB; the API reads from the database.
+// Seed-only demo records; runtime API routes read from MongoDB, not this module.
 
 import { visitStatus } from './statuses.js';
 

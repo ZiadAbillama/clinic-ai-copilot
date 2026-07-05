@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// Vite dev server runs on port 3000 and proxies API calls to the Express backend.
+// Local dev keeps browser requests same-origin while forwarding /api to Express.
 export default defineConfig({
   plugins: [react()],
   server: {

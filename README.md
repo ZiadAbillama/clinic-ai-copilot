@@ -1,46 +1,91 @@
 # Clinic AI Copilot
 
-Clinic AI Copilot is a doctor-facing clinic workspace built as a staged training project. The current app focuses on secure provider access, appointment scheduling, patient records, visits, notes, patient timelines, note search, audit history, and doctor-reviewed AI summaries backed by MongoDB Atlas.
+Clinic AI Copilot is a doctor-facing clinic workspace for managing patients,
+appointments, clinical notes, and doctor-reviewed AI summaries. It is built as a
+JavaScript monorepo with a React/Vite frontend, an Express API, MongoDB Atlas
+storage, JWT authentication, and local Ollama support for AI summary generation.
 
-## Current Stage
+The product idea is intentionally narrow: the doctor writes the clinical note
+normally, then asks AI to draft a structured summary. The AI draft is never final
+by itself. The doctor must accept, edit, regenerate, or reject it before it is
+treated as reviewed.
 
-Current stage: Stage 10 complete for staging - Docker Compose is validated locally and Render staging is live. Production hardening and CI/CD are still pending.
+## Current Status
 
-Implemented:
+Stage 10 is complete for staging:
 
-- React/Vite frontend with the CliniKit-aligned visual direction
+- Local Docker Compose is validated.
+- Render staging is live.
+- The staging API and web app were smoke-tested end to end.
+- Production hardening, CI/CD, custom domains, and cloud AI hosting are still
+  pending.
+
+Live staging:
+
+```text
+https://clinic-ai-copilot-web-staging.onrender.com
+https://clinic-ai-copilot-api-staging.onrender.com/api/health
+```
+
+AI summaries work locally when Ollama is running. On Render staging, AI summaries
+require `OLLAMA_URL` to point to a cloud-reachable Ollama server. Localhost
+Ollama does not work from Render.
+
+## Core Workflow
+
+1. A doctor signs in.
+2. The dashboard shows patients and today's appointments.
+3. The doctor opens a patient or appointment.
+4. The doctor can create/edit/archive patients and schedule/edit/archive visits.
+5. The doctor writes a clinical note for a visit or patient.
+6. The doctor can generate an AI draft summary after the note exists.
+7. The AI draft shows short summary, key symptoms, assessment, and plan.
+8. The doctor accepts, edits, regenerates, or rejects the draft.
+9. Accepted/edited summaries are saved as doctor-reviewed output.
+10. Audit logs record important actions.
+
+## Implemented Features
+
 - Provider signup, login, session persistence, and sign out
-- Express API with JWT-protected clinical endpoints
-- MongoDB Atlas storage through Mongoose
-- Patient management with soft archive delete behavior
-- Appointment scheduling from today's appointment panel and patient visit history
-- Visits, notes, and patient timeline views with archive behavior
-- Appointment workspace with doctor note entry and AI draft summary review
-- Backend-owned visit status list exposed through `GET /api/statuses`
-- Patient list status and last visit date computed from appointment records
+- JWT-protected API routes
+- Doctor-scoped data isolation
+- Patient list, detail, create, edit, and archive
+- Appointment scheduling, status updates, visit history, and archive behavior
+- Clinical notes linked to patients or visits
+- Patient timeline combining visits and notes
 - MongoDB text search over active notes
-- Recent audit log viewer
-- Pagination for patients, appointments, visits, notes, timeline, note search, and audit log
-- Docker Compose setup for local API/web containers
-- Render staging API/web deployment
+- Audit log viewer
+- Backend-owned visit status enum exposed through `GET /api/statuses`
+- Patient directory status and last visit date computed from appointment records
+- Doctor-reviewed AI summary workflow backed by Ollama
+- Pagination for patients, appointments, notes, note search, timeline, and audit
+  logs
+- Soft archive behavior for patients, appointments, and notes
+- Local Docker Compose setup for API/web containers
+- Render staging deployment through `render.yaml`
 
-Not yet implemented:
+## Not Yet Implemented
 
-- Semantic search
-- Production deployment pipeline beyond Render staging
-- Full role-based access control beyond the doctor role
+- Cloud-hosted AI summaries for staging
+- Semantic/vector search
 - Forgot/reset password flow
-- Production auth hardening such as rate limiting and httpOnly cookie sessions
+- Full role-based access control beyond the doctor role
+- Login/register rate limiting
+- httpOnly cookie session strategy
+- CI/CD pipeline
+- Production deployment with custom domains and production secrets
 
-## Stack
+## Tech Stack
 
 - Package manager: Yarn 4 workspaces
 - Frontend: React, Vite, JavaScript
 - Backend: Node.js, Express, JavaScript
 - Database: MongoDB Atlas with Mongoose
-- AI: local Ollama, default model `llama3.1:8b`
-- Auth: JWT, bcrypt password hashing
+- Auth: JWT and bcrypt password hashing
+- AI: Ollama-compatible local provider, default model `llama3.1:8b`
 - Styling/assets: app-local CSS and CliniKit visual assets
+- Local containers: Docker Compose
+- Staging host: Render
 
 ## Repository Structure
 
@@ -48,22 +93,81 @@ Not yet implemented:
 apps/
   web/                       React/Vite frontend
 services/
-  api/                       Express API, auth, MongoDB models, seed script
+  api/                       Express API, auth, models, seed script
 packages/
-  shared/                    Shared workspace package placeholder
+  shared/                    Reserved workspace package for future shared code
 infra/
-  docker/                    Local infrastructure notes/assets
-  deployment/                Deployment notes/assets
-docs/                        Project plan and stage notes
+  docker/                    Dockerfiles, Nginx config, Docker usage notes
+  deployment/                Render and deployment notes
+docs/                        Project plan and implementation roadmap
 ```
+
+Important files:
+
+- `render.yaml` - Render Blueprint for staging API/web services
+- `docker-compose.yml` - local container orchestration
+- `.env.example` - required environment variable template
+- `docs/PROJECT_PLAN.md` - staged roadmap and system decisions
+- `infra/deployment/render.md` - Render staging setup and operations
+
+## Data Model
+
+Every clinical record is scoped to a `doctorId`.
+
+- `Doctor` - name, email, password hash
+- `Patient` - demographics, contact, active/archive state
+- `Appointment` - scheduled date/time, reason, status, patient link
+- `Note` - clinical note text, patient link, optional appointment link
+- `AiSummary` - draft/reviewed summary sections tied to a note
+- `AuditLog` - key actions for traceability
+
+`noteCount`, current patient status, and last visit date are computed by the API.
+They are not manually editable fields in the frontend.
+
+## API Overview
+
+Public routes:
+
+- `GET /api/health`
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+
+Authenticated routes:
+
+- `GET /api/auth/me`
+- `GET /api/statuses`
+- `GET /api/patients`
+- `GET /api/patients/:id`
+- `POST /api/patients`
+- `PATCH /api/patients/:id`
+- `DELETE /api/patients/:id`
+- `GET /api/appointments`
+- `POST /api/appointments`
+- `PATCH /api/appointments/:id`
+- `DELETE /api/appointments/:id`
+- `GET /api/notes`
+- `GET /api/notes/search`
+- `POST /api/notes`
+- `PATCH /api/notes/:id`
+- `DELETE /api/notes/:id`
+- `GET /api/notes/:id/summary`
+- `POST /api/notes/:id/summarize`
+- `PATCH /api/summaries/:id`
+- `GET /api/audit-logs`
+- `GET /api/patients/:id/timeline`
+
+Paginated list endpoints accept `page` and `limit` query parameters. The
+frontend hides pagination controls when a list is empty or has one page.
 
 ## Environment Setup
 
-Create a local `.env` from `.env.example` and fill in real values before starting the API.
+Create a local `.env` from `.env.example` and fill in real values before
+starting the API.
 
 Required API values:
 
 ```env
+NODE_ENV=development
 MONGO_URL=your_mongodb_atlas_connection_string
 JWT_SECRET=your_local_secret
 CORS_ORIGINS=http://localhost:3000
@@ -87,9 +191,10 @@ OLLAMA_MODEL=llama3.1:8b
 OLLAMA_TIMEOUT_MS=45000
 ```
 
-For local development, the frontend falls back to `http://localhost:3001`. Production builds require `VITE_API_BASE_URL`.
+Local development falls back to `http://localhost:3001` when
+`VITE_API_BASE_URL` is not set. Production builds require `VITE_API_BASE_URL`.
 
-## Startup Flow
+## Local Development
 
 Install dependencies:
 
@@ -109,14 +214,7 @@ Start the API:
 yarn api:dev
 ```
 
-For AI summaries, start Ollama separately and make sure the configured model is installed:
-
-```bash
-ollama pull llama3.1:8b
-ollama serve
-```
-
-Start the web app in a second terminal:
+Start the web app in another terminal:
 
 ```bash
 yarn web:dev
@@ -128,9 +226,18 @@ Open:
 http://localhost:3000
 ```
 
-## Docker Startup Flow
+For AI summaries, start Ollama separately and install the configured model:
 
-The Docker setup uses the same root `.env` file. Fill in `.env` first, then run:
+```bash
+ollama pull llama3.1:8b
+ollama serve
+```
+
+## Docker
+
+The Docker setup uses the same root `.env` file.
+
+Start API and web containers:
 
 ```bash
 docker compose up --build
@@ -154,28 +261,33 @@ When using Ollama from Docker, keep Ollama running on the host and use:
 DOCKER_OLLAMA_URL=http://host.docker.internal:11434
 ```
 
-If local dev servers are already using ports `3000` and `3001`, run Docker on
+If local dev servers already use ports `3000` and `3001`, run Docker on
 alternate host ports:
 
 ```bash
 API_PORT=3101 WEB_PORT=3100 VITE_API_BASE_URL=http://localhost:3101 CORS_ORIGINS=http://localhost:3100 docker compose up --build
 ```
 
-## Staging
+## Render Staging
 
-Render staging is live:
+Render staging is managed by the root `render.yaml` Blueprint.
+
+Current staging services:
 
 ```text
-https://clinic-ai-copilot-web-staging.onrender.com
-https://clinic-ai-copilot-api-staging.onrender.com/api/health
+clinic-ai-copilot-api-staging
+clinic-ai-copilot-web-staging
 ```
 
-Staging is backed by the configured MongoDB Atlas staging connection. AI summary
-generation requires `OLLAMA_URL` to point to a cloud-reachable Ollama server.
+See `infra/deployment/render.md` for setup, seeding, URL checks, and staging
+smoke testing.
 
 ## Useful Scripts
 
 ```bash
+yarn web:dev
+yarn api:dev
+yarn api:seed
 yarn web:lint
 yarn api:lint
 yarn lint
@@ -183,17 +295,39 @@ yarn web:build
 yarn docker:build
 yarn docker:up
 yarn docker:down
+yarn format
+yarn format:check
 ```
 
-## Notes
+## Security And Data Notes
 
-- Do not commit real `.env` secrets.
-- MongoDB Atlas is the shared development database path for this project.
-- Patient delete currently archives patient records and related visits/notes instead of hard-deleting them.
-- `noteCount` is calculated from notes by the API and is not editable in the patient form.
-- Patient directory status comes from appointment records. `New patient` is a display label only when no visits exist.
-- Visit statuses come from the API status endpoint, not a duplicated frontend list.
-- AI summaries are drafts until a doctor accepts or rejects them. Editing the original note invalidates prior summaries.
-- Ollama must be running locally for AI summary generation.
-- See `infra/docker/README.md` for container usage and `infra/deployment/README.md` for deployment notes.
-- See `infra/deployment/render.md` for Render staging steps.
+- Do not commit `.env` files or real secrets.
+- Staging should use demo data only.
+- Every patient, appointment, note, AI summary, and audit log is scoped to the
+  authenticated doctor.
+- Patient, appointment, and note deletes use archive behavior instead of hard
+  deletion.
+- CORS must list only known frontend origins.
+- `JWT_SECRET` is required at API startup.
+- AI summaries should not be used with real patient data until privacy,
+  compliance, retention, and provider terms are reviewed.
+
+## Known Limitations
+
+- Render staging does not currently have cloud AI connected.
+- The demo doctor is created by the seed script; new doctor accounts start with
+  empty data by design.
+- Duplicate patient handling is basic.
+- Auth is suitable for development/staging but not yet production-hardened.
+- Forgot/reset password is not implemented.
+- Semantic search is not implemented.
+- No CI/CD pipeline is configured yet.
+
+## Recommended Next Steps
+
+1. Decide the AI provider strategy for staging.
+2. Add production auth hardening: rate limiting, password reset, and safer
+   session handling.
+3. Add CI checks before Render auto-deploys.
+4. Prepare production environment values and custom domains.
+5. Add semantic search only after the core clinical workflow is stable.
